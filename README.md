@@ -129,6 +129,8 @@ Governed ingestion supports permitted Greenhouse and Lever job-board endpoints p
 
 The collectors are admin-triggered and synchronous with a 20-second network timeout; recurring scheduling, retry orchestration and source-specific rate policies are not implemented yet. Operators remain responsible for confirming source terms, robots directives, rate limits and takedown requirements before registration. The project does not scrape SEEK, bypass authentication, CAPTCHAs or platform controls, and does not claim complete New Zealand market coverage.
 
+For local development, `scripts/seed_market_sources.ps1` registers and runs the two permitted public Greenhouse adapters used for the first market slice: Pushpay and Rocket Lab. It records the permission basis and collector run results in PostgreSQL; only postings whose location explicitly matches New Zealand are accepted. This is a reproducible seed, not a claim that the resulting sample represents the whole market. After collection, run `POST /api/v1/rag/index` with the ingestion credential to build the searchable evidence corpus.
+
 ## Roadmap
 
 1. Versioned job, skill, source, and candidate-evidence schema with migrations.
