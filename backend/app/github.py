@@ -22,6 +22,9 @@ class GithubSnapshot:
 
 
 def parse_repo_url(value: str) -> tuple[str, str]:
+    profile_match = re.fullmatch(r"https?://github\.com/([^/]+)/?", value.strip())
+    if profile_match:
+        raise ValueError("Use a GitHub repository URL, not a personal profile URL. Example: https://github.com/user/repository")
     match = re.fullmatch(r"https?://github\.com/([^/]+)/([^/#?]+?)/?", value.strip())
     if not match or match.group(2).endswith(".git"):
         if match and match.group(2).endswith(".git"):
