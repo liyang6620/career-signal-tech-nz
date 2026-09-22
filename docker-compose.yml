@@ -27,6 +27,7 @@ services:
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-career-signal}
       STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-development-storage-secret}
       CLAMAV_HOST: antivirus
+      INGESTION_API_KEY: ${INGESTION_API_KEY:-development-ingestion-key}
     ports:
       - "8000:8000"
     depends_on:

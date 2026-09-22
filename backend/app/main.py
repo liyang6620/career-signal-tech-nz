@@ -1,12 +1,13 @@
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import delete, select
+from sqlalchemy import delete, desc, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .auth import (
@@ -33,11 +34,15 @@ from .models import (
     EvidenceUpload,
     GithubProject,
     GithubSuggestion,
+    JobPosting,
+    JobPostingSkill,
+    MarketSource,
     OneTimeToken,
     ProcessingJob,
     RefreshSession,
     User,
 )
+from .role_decoder import ROLE_LABELS, decode_role
 from .schemas import (
     AuthResponse,
     DeleteAccountRequest,
@@ -49,10 +54,14 @@ from .schemas import (
     GithubProjectRequest,
     GithubProjectResponse,
     LoginRequest,
+    MarketImportRequest,
+    MarketSummaryResponse,
     ProfileResponse,
     ProfileSetupRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    RoleDecodeRequest,
+    RoleDecodeResponse,
     RoleFamily,
     RoleFitResponse,
     SkillEvidenceResponse,
@@ -321,6 +330,102 @@ def roles() -> list[RoleFamily]:
         RoleFamily(id="product-ux", label="Product and UX", status="planned"),
         RoleFamily(id="cybersecurity", label="Cybersecurity", status="planned"),
     ]
+
+
+@app.post("/api/v1/role-decoder", response_model=RoleDecodeResponse)
+def role_decoder(payload: RoleDecodeRequest, user: Annotated[User, Depends(verified_user)]) -> RoleDecodeResponse:
+    decoded = decode_role(payload.title, payload.description)
+    return RoleDecodeResponse(
+        role_family=decoded.role_family,
+        role_label=decoded.role_label,
+        confidence=decoded.confidence,
+        seniority=decoded.seniority,
+        matched_skills=[
+            {"slug": slug, "name": name, "mention_count": count}
+            for slug, name, count in decoded.matched_skills
+        ],
+        alternatives=[
+            {"role_family": role, "role_label": ROLE_LABELS[role], "score_share": share}
+            for role, share in decoded.alternatives
+        ],
+    )
+
+
+@app.post("/api/v1/market/import", status_code=status.HTTP_202_ACCEPTED)
+def import_market_postings(
+    payload: MarketImportRequest,
+    db: Annotated[Session, Depends(get_db)],
+    ingestion_key: Annotated[str | None, Header(alias="X-Ingestion-Key")] = None,
+) -> dict[str, int]:
+    if ingestion_key != settings.ingestion_api_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid ingestion credential")
+    source = MarketSource(
+        name=payload.source.name,
+        source_type=payload.source.source_type,
+        permission_basis=payload.source.permission_basis,
+        base_url=str(payload.source.base_url),
+    )
+    db.add(source)
+    db.flush()
+    imported = 0
+    updated = 0
+    for item in payload.postings:
+        source_url = str(item.source_url)
+        content_hash = hashlib.sha256(f"{item.title}\n{item.description}".encode()).hexdigest()
+        posting = db.scalar(select(JobPosting).where(JobPosting.source_url == source_url))
+        decoded = decode_role(item.title, item.description)
+        if posting is None:
+            posting = JobPosting(source_id=source.id, source_url=source_url)
+            db.add(posting)
+            imported += 1
+        else:
+            db.execute(delete(JobPostingSkill).where(JobPostingSkill.posting_id == posting.id))
+            updated += 1
+        posting.content_hash = content_hash
+        posting.title = item.title
+        posting.company = item.company
+        posting.location = item.location
+        posting.description = item.description
+        posting.role_family = decoded.role_family
+        posting.seniority = decoded.seniority
+        posting.classification_confidence = decoded.confidence
+        posting.published_at = item.published_at
+        db.flush()
+        db.add_all(
+            JobPostingSkill(posting_id=posting.id, skill_slug=slug, mention_count=count)
+            for slug, _, count in decoded.matched_skills
+        )
+    db.commit()
+    return {"imported": imported, "updated": updated}
+
+
+@app.get("/api/v1/market/summary", response_model=MarketSummaryResponse)
+def market_summary(
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> MarketSummaryResponse:
+    roles = db.execute(
+        select(JobPosting.role_family, func.count(JobPosting.id))
+        .group_by(JobPosting.role_family)
+        .order_by(desc(func.count(JobPosting.id)))
+    ).all()
+    locations = db.execute(
+        select(JobPosting.location, func.count(JobPosting.id))
+        .group_by(JobPosting.location)
+        .order_by(desc(func.count(JobPosting.id)))
+    ).all()
+    skills = db.execute(
+        select(JobPostingSkill.skill_slug, func.count(JobPostingSkill.posting_id))
+        .group_by(JobPostingSkill.skill_slug)
+        .order_by(desc(func.count(JobPostingSkill.posting_id)))
+        .limit(15)
+    ).all()
+    return MarketSummaryResponse(
+        posting_count=db.scalar(select(func.count(JobPosting.id))) or 0,
+        roles=[{"role_family": role, "count": count} for role, count in roles],
+        locations=[{"location": location, "count": count} for location, count in locations],
+        top_skills=[{"skill_slug": slug, "skill_name": SKILLS[slug][0], "count": count} for slug, count in skills],
+    )
 
 
 def profile_response(profile: CareerProfile) -> ProfileResponse:

@@ -243,3 +243,42 @@ class GithubSuggestion(Base):
     proposed_level: Mapped[int] = mapped_column(Integer)
     review_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MarketSource(Base):
+    __tablename__ = "market_sources"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(160))
+    source_type: Mapped[str] = mapped_column(String(50))
+    permission_basis: Mapped[str] = mapped_column(Text)
+    base_url: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class JobPosting(Base):
+    __tablename__ = "job_postings"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("market_sources.id", ondelete="RESTRICT"), index=True)
+    source_url: Mapped[str] = mapped_column(Text, unique=True)
+    content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(240))
+    company: Mapped[str] = mapped_column(String(180))
+    location: Mapped[str] = mapped_column(String(120), index=True)
+    description: Mapped[str] = mapped_column(Text)
+    role_family: Mapped[str] = mapped_column(String(80), index=True)
+    seniority: Mapped[str] = mapped_column(String(50), index=True)
+    classification_confidence: Mapped[float] = mapped_column(Float)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class JobPostingSkill(Base):
+    __tablename__ = "job_posting_skills"
+    __table_args__ = (UniqueConstraint("posting_id", "skill_slug"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    posting_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("job_postings.id", ondelete="CASCADE"), index=True)
+    skill_slug: Mapped[str] = mapped_column(ForeignKey("canonical_skills.slug"), index=True)
+    mention_count: Mapped[int] = mapped_column(Integer)

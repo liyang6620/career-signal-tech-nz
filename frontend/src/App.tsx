@@ -41,6 +41,7 @@ type EvidenceSuggestion = { id: string; canonical_skill: string; category: strin
 type GithubProject = { id: string; repository: string; status: string; suggestions: EvidenceSuggestion[] };
 type FitContribution = { skill_slug: string; skill_name: string; weight: number; required: boolean; evidence_level: number; normalized_score: number; weighted_score: number };
 type RoleFit = { role_family: string; score: number; coverage: number; evidence_depth: number; cap_applied: boolean; contributions: FitContribution[] };
+type ProductView = "workspace" | "market" | "decoder";
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string, user: SessionUser) => void }) {
   const resetToken = new URLSearchParams(window.location.search).get("reset");
@@ -134,6 +135,11 @@ export default function App() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [roleFit, setRoleFit] = useState<RoleFit | null>(null);
+  const [view, setView] = useState<ProductView>("workspace");
+  const [decoderTitle, setDecoderTitle] = useState("");
+  const [decoderDescription, setDecoderDescription] = useState("");
+  const [decodedRole, setDecodedRole] = useState<{ role_label: string; confidence: number; seniority: string; matched_skills: { name: string; mention_count: number }[] } | null>(null);
+  const [market, setMarket] = useState<{ posting_count: number; roles: { role_family: string; count: number }[]; top_skills: { skill_name: string; count: number }[]; locations: { location: string; count: number }[] } | null>(null);
 
   useEffect(() => {
     fetch(`${API_URL}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
@@ -240,6 +246,21 @@ export default function App() {
     setStep(1);
   }
 
+  async function decodeJob(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    const response = await fetch(`${API_URL}/api/v1/role-decoder`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ title: decoderTitle, description: decoderDescription }) });
+    const result = await response.json();
+    if (!response.ok) { setError(result.detail ?? "Could not decode this role"); return; }
+    setDecodedRole(result);
+  }
+
+  async function openMarket() {
+    setView("market");
+    const response = await fetch(`${API_URL}/api/v1/market/summary`, { headers: { Authorization: `Bearer ${token}` } });
+    if (response.ok) setMarket(await response.json());
+  }
+
   if (checkingSession) return <div className="session-loading"><span>CS</span><div><i /><i /><i /></div></div>;
   if (!token || !user) return <AuthScreen onAuthenticated={(accessToken, sessionUser) => { setToken(accessToken); setUser(sessionUser); }} />;
   if (!user.is_verified) return <VerifyEmailScreen token={token} user={user} onVerified={() => setUser({ ...user, is_verified: true })} onSignOut={logout} />;
@@ -283,9 +304,9 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand"><span>CS</span><strong>CareerSignal</strong></div>
         <nav aria-label="Product navigation">
-          <a className="active"><LayoutDashboard size={17} />Workspace</a>
-          <a><BarChart3 size={17} />Market explorer</a>
-          <a><BriefcaseBusiness size={17} />Role decoder</a>
+          <button className={view === "workspace" ? "active" : ""} onClick={() => setView("workspace")}><LayoutDashboard size={17} />Workspace</button>
+          <button className={view === "market" ? "active" : ""} onClick={openMarket}><BarChart3 size={17} />Market explorer</button>
+          <button className={view === "decoder" ? "active" : ""} onClick={() => setView("decoder")}><BriefcaseBusiness size={17} />Role decoder</button>
           <a><Target size={17} />Career path map</a>
           <a><FileText size={17} />Evidence graph</a>
           <a><BookOpen size={17} />SkillRoute</a>
@@ -300,7 +321,9 @@ export default function App() {
           <button className="quiet-button">Save and exit</button>
         </header>
 
-        <div className="setup-page">
+        {view === "decoder" && <div className="tool-page"><header><p>Role decoder</p><h1>Decode the work behind the title</h1><span>Classification uses responsibilities and explicit skills. No AI model is involved.</span></header><section className="tool-panel"><form onSubmit={decodeJob}><label className="field"><span>Advertised title</span><input required minLength={2} value={decoderTitle} onChange={(event) => setDecoderTitle(event.target.value)} /></label><label className="field"><span>Responsibilities and requirements</span><textarea required minLength={40} value={decoderDescription} onChange={(event) => setDecoderDescription(event.target.value)} /></label><button className="primary-button">Analyse role <ArrowRight size={15} /></button></form>{decodedRole && <div className="decoder-result"><small>Best classification</small><h2>{decodedRole.role_label}</h2><p>{Math.round(decodedRole.confidence * 100)}% rule confidence · {decodedRole.seniority}</p><div>{decodedRole.matched_skills.map((skill) => <span key={skill.name}>{skill.name} <b>{skill.mention_count}</b></span>)}</div></div>}{error && <p className="form-error">{error}</p>}</section></div>}
+        {view === "market" && <div className="tool-page"><header><p>Tech market explorer</p><h1>Imported New Zealand market evidence</h1><span>Only governed sources with recorded permission basis appear here.</span></header><section className="tool-panel">{market?.posting_count ? <><div className="market-total"><strong>{market.posting_count}</strong><span>classified postings</span></div><div className="market-columns"><div><h3>Role families</h3>{market.roles.map((item) => <p key={item.role_family}><span>{roles[item.role_family as Exclude<RoleKey, "">] ?? item.role_family}</span><b>{item.count}</b></p>)}</div><div><h3>Top skills</h3>{market.top_skills.map((item) => <p key={item.skill_name}><span>{item.skill_name}</span><b>{item.count}</b></p>)}</div><div><h3>Locations</h3>{market.locations.map((item) => <p key={item.location}><span>{item.location}</span><b>{item.count}</b></p>)}</div></div></> : <div className="market-empty"><BarChart3 size={24} /><h2>No governed market dataset loaded</h2><p>CareerSignal will not display fabricated counts. Import permitted company-career or licensed records through the ingestion API.</p></div>}</section></div>}
+        {view === "workspace" && <div className="setup-page">
           <header className="setup-header">
             <p>Career profile</p>
             <h1>Start your career workspace</h1>
@@ -359,7 +382,7 @@ export default function App() {
             </footer>
           </section>
           {saved && roleFit && role && <section className="evidence-graph-panel"><div className="panel-title"><span className="panel-icon"><GitBranch size={20} /></span><div><h2>Candidate evidence graph</h2><p>Confirmed CV evidence mapped to the requirements of {roles[role]}.</p></div></div><div className="fit-summary"><div><span>Documented fit</span><strong>{roleFit.score}</strong><small>/ 100</small></div><div><span>Coverage</span><strong>{roleFit.coverage}%</strong></div><div><span>Evidence depth</span><strong>{roleFit.evidence_depth}%</strong></div></div><div className="skill-network">{roleFit.contributions.map((item) => <div className={`skill-node ${item.evidence_level ? "supported" : "missing"}`} key={item.skill_slug}><div><b>{item.skill_name}</b>{item.required && <em>required</em>}</div><span>{item.evidence_level ? `Level ${item.evidence_level}/5 · ${item.normalized_score}` : "No confirmed evidence"}</span><i><u style={{ width: `${Math.min(item.normalized_score, 100)}%` }} /></i></div>)}</div>{roleFit.cap_applied && <p className="fit-warning">A required capability is missing, so the documented fit is capped at 59. This is an auditable evidence gap, not a judgement of ability.</p>}</section>}
-        </div>
+        </div>}
       </main>
     </div>
   );

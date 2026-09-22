@@ -381,3 +381,48 @@ def test_public_github_evidence_is_reviewed_and_included_in_fit(
     assert any(item["evidence_level"] == 2 for item in fit.json()["contributions"])
     graph = client.get("/api/v1/evidence/graph?role_family=ai", headers=headers)
     assert any(item["source_type"] == "github" for item in graph.json()["evidence"])
+
+
+def test_role_decoder_and_governed_market_import(client: TestClient) -> None:
+    auth = register(client)
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+    description = (
+        "Build Python data pipelines with SQL, dbt, Airflow and Docker. "
+        "Use automated testing and Git in a graduate engineering team."
+    )
+    decoded = client.post(
+        "/api/v1/role-decoder",
+        headers=headers,
+        json={"title": "Graduate Data Engineer", "description": description},
+    )
+    assert decoded.status_code == 200
+    assert decoded.json()["role_family"] == "data-engineer"
+    assert decoded.json()["seniority"] == "graduate"
+    payload = {
+        "source": {
+            "name": "Permitted test feed",
+            "source_type": "manual-permitted",
+            "permission_basis": "Publisher supplied this record for indexing.",
+            "base_url": "https://jobs.example.com",
+        },
+        "postings": [{
+            "source_url": "https://jobs.example.com/roles/1",
+            "title": "Graduate Data Engineer",
+            "company": "Example Ltd",
+            "location": "Auckland",
+            "description": description,
+        }],
+    }
+    denied = client.post("/api/v1/market/import", json=payload)
+    assert denied.status_code == 401
+    imported = client.post(
+        "/api/v1/market/import",
+        headers={"X-Ingestion-Key": "development-ingestion-key"},
+        json=payload,
+    )
+    assert imported.status_code == 202
+    assert imported.json()["imported"] == 1
+    summary = client.get("/api/v1/market/summary", headers=headers)
+    assert summary.status_code == 200
+    assert summary.json()["posting_count"] == 1
+    assert summary.json()["roles"][0]["role_family"] == "data-engineer"

@@ -63,6 +63,7 @@ Missing required skills cap a dimension score. The API returns all contributions
 - Private files: S3-compatible object storage, presigned direct uploads, ClamAV, durable PostgreSQL work queue
 - Document evidence: local PDF/DOCX parsing, versioned deterministic skill matching, user-confirmed evidence review
 - Project evidence: public GitHub repository snapshots, conservative README/language/topic matching, explicit review
+- Market intelligence: governed posting imports, provenance and permission metadata, deterministic role decoding
 - Data/RAG: PostgreSQL 16 + pgvector; local embeddings by default
 - Analytics/ingestion (planned): DuckDB, Parquet, Python collectors and APScheduler
 - AI: optional OpenAI Responses API with Structured Outputs and cited context
@@ -130,7 +131,7 @@ Planned ingestion uses public company career pages, permitted Greenhouse/Lever e
 
 ## Production-readiness status
 
-The repository currently provides a tested foundation rather than claiming production operation. Authentication, private CV ingestion, malware scanning, local PDF/DOCX parsing, public GitHub repository snapshots, explicit evidence review, a canonical skill taxonomy and deterministic role-fit calculations are implemented. The CV parser stores a document fingerprint and short evidence excerpts rather than a second full-text copy. GitHub matching is intentionally conservative: repository language, topics and README text can propose level-2 evidence, but never prove mastery without user review. OCR, embeddings, semantic evidence inference and repository code inspection are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
+The repository currently provides a tested foundation rather than claiming production operation. Authentication, private CV ingestion, public GitHub evidence, explicit evidence review, a canonical skill taxonomy, deterministic role fit, governed job-posting imports, Role Decoder and a live-data-only Market Explorer are implemented. Market imports require a separate ingestion credential and retain source URL, permission basis, retrieval time and content hash. The explorer intentionally shows an empty state until permitted records are loaded; it never substitutes demonstration counts. OCR, embeddings, semantic evidence inference, repository code inspection and production market collectors are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
 
 ## License
 

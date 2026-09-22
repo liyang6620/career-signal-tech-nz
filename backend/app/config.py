@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     clamav_host: str = "localhost"
     clamav_port: int = 3310
     upload_max_bytes: int = 10 * 1024 * 1024
+    ingestion_api_key: str = "development-ingestion-key"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -42,6 +43,8 @@ class Settings(BaseSettings):
             raise RuntimeError("SMTP_HOST must be configured in production")
         if self.environment == "production" and self.storage_secret_key == "development-storage-secret":
             raise RuntimeError("STORAGE_SECRET_KEY must be explicitly configured in production")
+        if self.environment == "production" and self.ingestion_api_key == "development-ingestion-key":
+            raise RuntimeError("INGESTION_API_KEY must be explicitly configured in production")
 
 
 @lru_cache

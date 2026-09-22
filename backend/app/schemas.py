@@ -253,3 +253,51 @@ class ProfileResponse(BaseModel):
     role_family: str
     evidence_sources: list[EvidenceSourceResponse]
     updated_at: datetime
+
+
+class RoleDecodeRequest(BaseModel):
+    title: str = Field(min_length=2, max_length=240)
+    description: str = Field(min_length=40, max_length=50_000)
+
+
+class DecodedSkill(BaseModel):
+    slug: str
+    name: str
+    mention_count: int
+
+
+class RoleDecodeResponse(BaseModel):
+    role_family: str
+    role_label: str
+    confidence: float
+    seniority: str
+    matched_skills: list[DecodedSkill]
+    alternatives: list[dict[str, str | float]]
+
+
+class MarketSourceInput(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    source_type: Literal["company-careers", "greenhouse", "lever", "licensed-dataset", "manual-permitted"]
+    permission_basis: str = Field(min_length=10, max_length=1000)
+    base_url: HttpUrl
+
+
+class JobPostingInput(BaseModel):
+    source_url: HttpUrl
+    title: str = Field(min_length=2, max_length=240)
+    company: str = Field(min_length=1, max_length=180)
+    location: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=40, max_length=50_000)
+    published_at: datetime | None = None
+
+
+class MarketImportRequest(BaseModel):
+    source: MarketSourceInput
+    postings: list[JobPostingInput] = Field(min_length=1, max_length=500)
+
+
+class MarketSummaryResponse(BaseModel):
+    posting_count: int
+    roles: list[dict[str, str | int]]
+    top_skills: list[dict[str, str | int]]
+    locations: list[dict[str, str | int]]

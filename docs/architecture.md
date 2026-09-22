@@ -58,6 +58,15 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
 - The owner must review every suggestion before it enters the shared candidate evidence graph.
 - Role fit selects the strongest confirmed evidence per skill across CV and GitHub sources without double-counting it.
 
+## Market ingestion and role decoding
+
+- Market writes require a separate ingestion credential; authenticated product users cannot insert market records.
+- Every batch records the source type, base URL and human-readable permission basis.
+- Each posting retains its canonical source URL, content hash, publication time and retrieval time.
+- Role family, seniority and skill mentions are produced by a versioned deterministic classifier over responsibilities.
+- Market Explorer aggregates only persisted governed records and shows an explicit empty state when none exist.
+- This release supports permitted structured imports. Automated collectors and source-specific reliability reports remain future work.
+
 ## Scoring
 
 Each assessment is bound to target role, location, seniority, and market window. A skill contribution is:
