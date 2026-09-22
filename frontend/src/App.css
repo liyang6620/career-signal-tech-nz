@@ -187,6 +187,12 @@ select {
 .ai-explanation small { color:#87918a; font-size:9px; font-weight:500; letter-spacing:0; }
 .ai-explanation p { margin:13px 0 0; color:#3d464d; font-size:12px; line-height:1.7; white-space:pre-wrap; }
 @media (max-width: 700px) { .welcome-nav-links { display: none; } .welcome-hero { padding: 58px 0 48px; } .welcome-hero h1 { font-size: 38px; } .welcome-lede { font-size: 15px; } .welcome-grid { grid-template-columns: 1fr; } .welcome-grid article, .welcome-grid article:not(:first-child) { min-height: auto; padding: 22px 0; border-right: 0; border-bottom: 1px solid #dfe4e1; } .welcome-grid article:last-child { border-bottom: 0; } .welcome-journey { grid-template-columns: 1fr; gap: 25px; padding-top: 35px; } .welcome-journey ol { grid-template-columns: 1fr; gap: 18px; } .auth-back { font-size: 10px; } .ai-action { align-items:flex-start; flex-direction:column; } }
+/* Readability pass for the authenticated product surface. */
+.product-shell main { font-size: 15px; }
+.product-shell .tool-page > header span, .product-shell .setup-header > span, .product-shell .panel-title p, .product-shell .source-row p, .product-shell .privacy-note, .product-shell .field > span { font-size: 14px; }
+.product-shell .source-row strong, .product-shell .review-list dt, .product-shell .review-list dd, .product-shell .evidence-item, .product-shell .not-live p { font-size: 14px; }
+.product-shell .source-row textarea { min-height: 72px; resize: vertical; border: 0; outline: 0; width: 100%; padding: 8px; color: #47515a; }
+.product-shell .evidence-item small, .product-shell .evidence-item q { font-size: 13px; }
 .product-shell {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);

@@ -149,7 +149,7 @@ export default function App() {
   const [suggestions, setSuggestions] = useState<EvidenceSuggestion[]>([]);
   const [confirmedSuggestions, setConfirmedSuggestions] = useState<Set<string>>(new Set());
   const [github, setGithub] = useState("");
-  const [githubProject, setGithubProject] = useState<GithubProject | null>(null);
+  const [githubProjects, setGithubProjects] = useState<GithubProject[]>([]);
   const [confirmedGithub, setConfirmedGithub] = useState<Set<string>>(new Set());
   const [portfolio, setPortfolio] = useState("");
   const [error, setError] = useState("");
@@ -245,7 +245,7 @@ export default function App() {
       if (!review.ok) { setError(reviewed.detail ?? "Could not save the evidence review"); return; }
       setCvStatus(reviewed.status);
     }
-    if (githubProject?.status === "awaiting_review") {
+    for (const githubProject of githubProjects.filter((item) => item.status === "awaiting_review")) {
       const review = await fetch(`${API_URL}/api/v1/evidence/github/${githubProject.id}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -253,7 +253,7 @@ export default function App() {
       });
       const reviewed = await review.json();
       if (!review.ok) { setError(reviewed.detail ?? "Could not save the GitHub evidence review"); return; }
-      setGithubProject(reviewed);
+      setGithubProjects((current) => current.map((item) => item.id === reviewed.id ? reviewed : item));
     }
     const evidence_sources = [
       ...(github.trim() ? [{ source_type: "github", source_reference: github.startsWith("http") ? github : `https://${github}` }] : []),
@@ -371,17 +371,17 @@ export default function App() {
       setError("Add at least one evidence source, or skip this step and add evidence manually later.");
       return;
     }
-    if (github.trim() && !githubProject) {
-      const url = github.startsWith("http") ? github : `https://${github}`;
-      const response = await fetch(`${API_URL}/api/v1/evidence/github`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ url }),
-      });
-      const project = await response.json();
-      if (!response.ok) { setError(project.detail ?? "Could not inspect this GitHub repository"); return; }
-      setGithubProject(project);
-      setConfirmedGithub(new Set(project.suggestions.map((item: EvidenceSuggestion) => item.id)));
+    if (github.trim() && githubProjects.length === 0) {
+      const urls = github.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+      const projects: GithubProject[] = [];
+      for (const rawUrl of urls) {
+        const response = await fetch(`${API_URL}/api/v1/evidence/github`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ url: rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}` }) });
+        const project = await response.json();
+        if (!response.ok) { setError(project.detail ?? `Could not inspect ${rawUrl}`); return; }
+        projects.push(project);
+      }
+      setGithubProjects(projects);
+      setConfirmedGithub(new Set(projects.flatMap((project) => project.suggestions.map((item) => item.id))));
     }
     setError("");
     setStep(3);
@@ -442,7 +442,7 @@ export default function App() {
               <div className="panel-title"><span className="panel-icon"><FileText size={20} /></span><div><h2>Add evidence of your work</h2><p>Use one or more sources. You will review extracted evidence before it affects your profile.</p></div></div>
               <div className="source-list">
                 <div className={`source-row ${cv ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cv ? `${cv.name} · ${cvStatus.replaceAll("_", " ")}` : "PDF or DOCX, up to 10 MB"}</p></div>{cv ? <button className="icon-action" aria-label="Remove CV" onClick={removeCv}><X size={17} /></button> : <label className="upload-button"><UploadCloud size={15} />Choose file<input type="file" accept=".pdf,.docx" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCv(file); }} /></label>}</div>
-                <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub project</strong><p>One public repository</p></div><div className="url-control"><Link2 size={15} /><input placeholder="github.com/username/repository" value={github} onChange={(event) => { setGithub(event.target.value); setGithubProject(null); }} /></div></label>
+                <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub projects</strong><p>One or more public repositories</p></div><div className="url-control"><Link2 size={15} /><textarea placeholder="One repository URL per line" value={github} onChange={(event) => { setGithub(event.target.value); setGithubProjects([]); }} /></div></label>
                 <label className="source-row"><span className="source-icon"><Link2 size={19} /></span><div><strong>Portfolio or project</strong><p>Optional public URL</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://" value={portfolio} onChange={(event) => setPortfolio(event.target.value)} /></div></label>
                 <button className="manual-source"><Plus size={16} />Add evidence manually</button>
               </div>
@@ -454,13 +454,13 @@ export default function App() {
               <dl className="review-list">
                 <div><dt>Target market</dt><dd><strong>{role ? roles[role] : "Not selected"}</strong><span>{location} · {seniority}</span></dd><button onClick={() => setStep(1)}>Edit</button></div>
                 <div><dt>CV</dt><dd><strong>{cv?.name ?? "Not added"}</strong><span>{cv ? `Security status: ${cvStatus.replaceAll("_", " ")}` : "You can add one later"}</span></dd><button onClick={() => setStep(2)}>Edit</button></div>
-                <div><dt>GitHub</dt><dd><strong>{github || "Not added"}</strong><span>{github ? "Public repositories will be reviewed" : "You can connect it later"}</span></dd><button onClick={() => setStep(2)}>Edit</button></div>
+                <div><dt>GitHub</dt><dd><strong>{github || "Not added"}</strong><span>{github ? `${githubProjects.length || "Selected"} public repositories will be reviewed` : "You can connect it later"}</span></dd><button onClick={() => setStep(2)}>Edit</button></div>
                 {portfolio && <div><dt>Portfolio</dt><dd><strong>{portfolio}</strong><span>Public page</span></dd><button onClick={() => setStep(2)}>Edit</button></div>}
               </dl>
               <div className="consent"><label><input type="checkbox" defaultChecked /><span>I understand that generated findings must be reviewed before I use them in an application.</span></label></div>
               <div className="not-live"><strong>Evidence processing</strong><p>CVs are stored privately and must pass file-signature and malware checks before extraction. Evidence extraction begins only after a clean result.</p></div>
               {suggestions.length > 0 && <div className="evidence-review"><div className="evidence-review-heading"><strong>Review extracted evidence</strong><span>{confirmedSuggestions.size} of {suggestions.length} selected</span></div>{suggestions.map((item) => <label className="evidence-item" key={item.id}><input type="checkbox" checked={confirmedSuggestions.has(item.id)} onChange={() => setConfirmedSuggestions((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} /><span><b>{item.canonical_skill}</b><small>{item.category} · proposed level {item.proposed_level}/5 · {Math.round(item.confidence * 100)}% match</small><q>{item.excerpt}</q></span></label>)}</div>}
-              {githubProject && <div className="evidence-review"><div className="evidence-review-heading"><strong>Review GitHub evidence · {githubProject.repository}</strong><span>{confirmedGithub.size} of {githubProject.suggestions.length} selected</span></div>{githubProject.suggestions.map((item) => <label className="evidence-item" key={item.id}><input type="checkbox" checked={confirmedGithub.has(item.id)} onChange={() => setConfirmedGithub((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} /><span><b>{item.canonical_skill}</b><small>{item.category} · conservative level {item.proposed_level}/5 · public repository</small><q>{item.excerpt}</q></span></label>)}</div>}
+              {githubProjects.map((githubProject) => <div className="evidence-review" key={githubProject.id}><div className="evidence-review-heading"><strong>Review GitHub evidence · {githubProject.repository}</strong><span>{githubProject.suggestions.filter((item) => confirmedGithub.has(item.id)).length} of {githubProject.suggestions.length} selected</span></div>{githubProject.suggestions.map((item) => <label className="evidence-item" key={item.id}><input type="checkbox" checked={confirmedGithub.has(item.id)} onChange={() => setConfirmedGithub((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} /><span><b>{item.canonical_skill}</b><small>{item.category} · conservative level {item.proposed_level}/5 · public repository</small><q>{item.excerpt}</q></span></label>)}</div>)}
             </>}
 
             {error && <p className="form-error" role="alert">{error}</p>}
