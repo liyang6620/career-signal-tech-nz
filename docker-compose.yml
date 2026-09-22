@@ -31,7 +31,7 @@ services:
       INGESTION_API_KEY: ${INGESTION_API_KEY:-development-ingestion-key}
       EMBEDDING_CACHE_PATH: /home/appuser/.cache/fastembed
     ports:
-      - "8000:8000"
+      - "${API_HOST_PORT:-8000}:8000"
     depends_on:
       database:
         condition: service_healthy
