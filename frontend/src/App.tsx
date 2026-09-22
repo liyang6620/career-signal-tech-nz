@@ -38,6 +38,8 @@ const roles: Record<Exclude<RoleKey, "">, string> = {
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 type SessionUser = { id: string; email: string; display_name: string; is_verified: boolean };
 type EvidenceSuggestion = { id: string; canonical_skill: string; category: string; excerpt: string; locator: string; confidence: number; proposed_level: number; review_status: string };
+type FitContribution = { skill_slug: string; skill_name: string; weight: number; required: boolean; evidence_level: number; normalized_score: number; weighted_score: number };
+type RoleFit = { role_family: string; score: number; coverage: number; evidence_depth: number; cap_applied: boolean; contributions: FitContribution[] };
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string, user: SessionUser) => void }) {
   const resetToken = new URLSearchParams(window.location.search).get("reset");
@@ -128,6 +130,7 @@ export default function App() {
   const [portfolio, setPortfolio] = useState("");
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [roleFit, setRoleFit] = useState<RoleFit | null>(null);
 
   useEffect(() => {
     fetch(`${API_URL}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
@@ -213,6 +216,8 @@ export default function App() {
     const data = await response.json();
     if (!response.ok) { setError(data.detail ?? "Could not save profile"); return; }
     setSaved(true);
+    const fit = await fetch(`${API_URL}/api/v1/evidence/fit?role_family=${encodeURIComponent(role)}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (fit.ok) setRoleFit(await fit.json());
   }
 
   async function logout() {
@@ -327,6 +332,7 @@ export default function App() {
               {step === 3 && <button className="primary-button" onClick={saveProfile}>{saved ? <><Check size={15} />Profile saved</> : <>Create evidence profile <ArrowRight size={15} /></>}</button>}
             </footer>
           </section>
+          {saved && roleFit && role && <section className="evidence-graph-panel"><div className="panel-title"><span className="panel-icon"><GitBranch size={20} /></span><div><h2>Candidate evidence graph</h2><p>Confirmed CV evidence mapped to the requirements of {roles[role]}.</p></div></div><div className="fit-summary"><div><span>Documented fit</span><strong>{roleFit.score}</strong><small>/ 100</small></div><div><span>Coverage</span><strong>{roleFit.coverage}%</strong></div><div><span>Evidence depth</span><strong>{roleFit.evidence_depth}%</strong></div></div><div className="skill-network">{roleFit.contributions.map((item) => <div className={`skill-node ${item.evidence_level ? "supported" : "missing"}`} key={item.skill_slug}><div><b>{item.skill_name}</b>{item.required && <em>required</em>}</div><span>{item.evidence_level ? `Level ${item.evidence_level}/5 · ${item.normalized_score}` : "No confirmed evidence"}</span><i><u style={{ width: `${Math.min(item.normalized_score, 100)}%` }} /></i></div>)}</div>{roleFit.cap_applied && <p className="fit-warning">A required capability is missing, so the documented fit is capped at 59. This is an auditable evidence gap, not a judgement of ability.</p>}</section>}
         </div>
       </main>
     </div>

@@ -6,41 +6,9 @@ from pathlib import Path
 from docx import Document
 from pypdf import PdfReader
 
+from .taxonomy import SKILLS
+
 PARSER_VERSION = "local-taxonomy-v1"
-
-SKILLS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "Python": ("Programming", (r"\bpython\b",)),
-    "JavaScript": ("Programming", (r"\bjavascript\b", r"\bjs\b")),
-    "TypeScript": ("Programming", (r"\btypescript\b",)),
-    "Java": ("Programming", (r"\bjava\b",)),
-    "C#": ("Programming", (r"(?<!\w)c#(?!\w)", r"\b\.net\b")),
-    "React": ("Frontend", (r"\breact(?:\.js)?\b",)),
-    "Node.js": ("Backend", (r"\bnode(?:\.js)?\b",)),
-    "FastAPI": ("Backend", (r"\bfastapi\b",)),
-    "SQL": ("Data", (r"\bsql\b",)),
-    "PostgreSQL": ("Data", (r"\bpostgres(?:ql)?\b",)),
-    "Power BI": ("Analytics", (r"\bpower\s*bi\b",)),
-    "Tableau": ("Analytics", (r"\btableau\b",)),
-    "dbt": ("Data Engineering", (r"\bdbt\b",)),
-    "Apache Spark": ("Data Engineering", (r"\b(?:apache\s+)?spark\b",)),
-    "Airflow": ("Data Engineering", (r"\bairflow\b",)),
-    "Docker": ("Cloud & DevOps", (r"\bdocker\b",)),
-    "Kubernetes": ("Cloud & DevOps", (r"\bkubernetes\b", r"\bk8s\b")),
-    "AWS": ("Cloud & DevOps", (r"\baws\b", r"amazon web services")),
-    "Azure": ("Cloud & DevOps", (r"\bazure\b",)),
-    "Google Cloud": ("Cloud & DevOps", (r"\bgcp\b", r"google cloud")),
-    "Terraform": ("Cloud & DevOps", (r"\bterraform\b",)),
-    "GitHub Actions": ("Delivery", (r"github actions",)),
-    "CI/CD": ("Delivery", (r"\bci\s*/\s*cd\b", r"continuous integration")),
-    "Machine Learning": ("AI & ML", (r"machine learning", r"\bml\b")),
-    "Large Language Models": ("AI & ML", (r"large language model", r"\bllms?\b")),
-    "RAG": ("AI & ML", (r"\brag\b", r"retrieval[- ]augmented generation")),
-    "Automated Testing": ("Quality", (r"automated testing", r"test automation", r"\bpytest\b", r"\bplaywright\b")),
-    "REST APIs": ("Software Engineering", (r"\brest(?:ful)?\s+apis?\b",)),
-    "Git": ("Software Engineering", (r"\bgit\b", r"\bgithub\b", r"\bgitlab\b")),
-    "Agile": ("Delivery", (r"\bagile\b", r"\bscrum\b")),
-}
-
 
 @dataclass(frozen=True)
 class ParsedDocument:
@@ -86,7 +54,7 @@ def parse_document(path: Path, content_type: str) -> ParsedDocument:
 def suggest_evidence(text: str) -> list[SuggestedEvidence]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     suggestions: list[SuggestedEvidence] = []
-    for skill, (category, patterns) in SKILLS.items():
+    for _, (skill, category, patterns) in SKILLS.items():
         match_line = next((line for line in lines if any(re.search(pattern, line, re.I) for pattern in patterns)), None)
         if match_line is None:
             continue

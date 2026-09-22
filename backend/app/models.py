@@ -163,3 +163,41 @@ class EvidenceSuggestion(Base):
     review_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CanonicalSkill(Base):
+    __tablename__ = "canonical_skills"
+
+    slug: Mapped[str] = mapped_column(String(100), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    category: Mapped[str] = mapped_column(String(60), index=True)
+    taxonomy_version: Mapped[str] = mapped_column(String(20), default="2026.1")
+
+
+class RoleSkillRequirement(Base):
+    __tablename__ = "role_skill_requirements"
+    __table_args__ = (UniqueConstraint("role_family", "skill_slug"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    role_family: Mapped[str] = mapped_column(String(80), index=True)
+    skill_slug: Mapped[str] = mapped_column(ForeignKey("canonical_skills.slug"), index=True)
+    weight: Mapped[float] = mapped_column(Float)
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class CandidateSkillEvidence(Base):
+    __tablename__ = "candidate_skill_evidence"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    upload_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evidence_uploads.id", ondelete="CASCADE"), index=True)
+    suggestion_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("evidence_suggestions.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    skill_slug: Mapped[str] = mapped_column(ForeignKey("canonical_skills.slug"), index=True)
+    evidence_level: Mapped[int] = mapped_column(Integer)
+    confidence: Mapped[float] = mapped_column(Float)
+    excerpt: Mapped[str] = mapped_column(Text)
+    locator: Mapped[str] = mapped_column(String(80))
+    source_type: Mapped[str] = mapped_column(String(30), default="cv")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

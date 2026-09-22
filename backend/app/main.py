@@ -21,6 +21,8 @@ from .config import get_settings
 from .database import get_db
 from .mailer import send_email
 from .models import (
+    CandidateSkillEvidence,
+    CanonicalSkill,
     CareerProfile,
     CareerTarget,
     DocumentExtraction,
@@ -46,6 +48,9 @@ from .schemas import (
     RegisterRequest,
     ResetPasswordRequest,
     RoleFamily,
+    RoleFitResponse,
+    SkillEvidenceResponse,
+    SkillGraphResponse,
     TokenRequest,
     UploadInitiateRequest,
     UploadInitiateResponse,
@@ -55,6 +60,7 @@ from .schemas import (
 from .scoring import calculate_dimension_score
 from .security_events import actor_fingerprint, audit, enforce_event_limit, enforce_login_limit
 from .storage import delete_object, ensure_bucket, object_metadata, presigned_put
+from .taxonomy import ROLE_REQUIREMENTS, slug_for_name
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
@@ -510,6 +516,21 @@ def review_extraction(
     for suggestion in suggestions:
         suggestion.review_status = decisions[suggestion.id]
         suggestion.reviewed_at = reviewed_at
+        if decisions[suggestion.id] == "confirmed":
+            skill_slug = slug_for_name(suggestion.canonical_skill)
+            if skill_slug is not None:
+                db.add(
+                    CandidateSkillEvidence(
+                        user_id=user.id,
+                        upload_id=upload.id,
+                        suggestion_id=suggestion.id,
+                        skill_slug=skill_slug,
+                        evidence_level=suggestion.proposed_level,
+                        confidence=suggestion.confidence,
+                        excerpt=suggestion.excerpt,
+                        locator=suggestion.locator,
+                    )
+                )
     upload.status = "reviewed"
     audit(
         db,
@@ -524,6 +545,85 @@ def review_extraction(
     db.commit()
     db.refresh(upload)
     return upload
+
+
+@app.get("/api/v1/evidence/graph", response_model=SkillGraphResponse)
+def evidence_graph(
+    role_family: str,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> SkillGraphResponse:
+    if role_family not in ROLE_REQUIREMENTS:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown role family")
+    rows = db.execute(
+        select(CandidateSkillEvidence, CanonicalSkill)
+        .join(CanonicalSkill, CanonicalSkill.slug == CandidateSkillEvidence.skill_slug)
+        .where(CandidateSkillEvidence.user_id == user.id)
+        .order_by(CanonicalSkill.category, CanonicalSkill.name)
+    ).all()
+    return SkillGraphResponse(
+        role_family=role_family,
+        evidence=[
+            SkillEvidenceResponse(
+                skill_slug=skill.slug,
+                skill_name=skill.name,
+                category=skill.category,
+                evidence_level=item.evidence_level,
+                confidence=item.confidence,
+                excerpt=item.excerpt,
+                locator=item.locator,
+                source_type=item.source_type,
+            )
+            for item, skill in rows
+        ],
+    )
+
+
+@app.get("/api/v1/evidence/fit", response_model=RoleFitResponse)
+def evidence_fit(
+    role_family: str,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> RoleFitResponse:
+    requirements = ROLE_REQUIREMENTS.get(role_family)
+    if requirements is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown role family")
+    evidence = {
+        item.skill_slug: item
+        for item in db.scalars(select(CandidateSkillEvidence).where(CandidateSkillEvidence.user_id == user.id))
+    }
+    skills = {
+        skill.slug: skill
+        for skill in db.scalars(
+            select(CanonicalSkill).where(CanonicalSkill.slug.in_(slug for slug, _, _ in requirements))
+        )
+    }
+    total_weight = sum(weight for _, weight, _ in requirements)
+    covered_weight = sum(
+        weight for slug, weight, _ in requirements if slug in evidence and evidence[slug].evidence_level > 0
+    )
+    depth = sum(
+        weight * (evidence[slug].evidence_level / 5) * evidence[slug].confidence * 100
+        for slug, weight, _ in requirements if slug in evidence
+    ) / total_weight
+    coverage = covered_weight / total_weight * 100
+    contributions = []
+    for slug, weight, required in requirements:
+        item = evidence.get(slug)
+        level = item.evidence_level if item else 0
+        normalized = round((level / 5) * (item.confidence if item else 0) * 100, 2)
+        contributions.append({
+            "skill_slug": slug, "skill_name": skills[slug].name, "weight": weight, "required": required,
+            "evidence_level": level, "normalized_score": normalized, "weighted_score": round(normalized * weight, 2),
+        })
+    score = coverage * 0.65 + depth * 0.35
+    cap_applied = any(required and slug not in evidence for slug, _, required in requirements) and score > 59
+    if cap_applied:
+        score = 59
+    return RoleFitResponse(
+        role_family=role_family, score=round(score, 2), coverage=round(coverage, 2),
+        evidence_depth=round(depth, 2), cap_applied=cap_applied, contributions=contributions,
+    )
 
 
 @app.delete("/api/v1/evidence/uploads/{upload_id}", status_code=status.HTTP_204_NO_CONTENT)

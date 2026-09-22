@@ -160,6 +160,41 @@ class EvidenceReviewRequest(BaseModel):
         return self
 
 
+class SkillEvidenceResponse(BaseModel):
+    skill_slug: str
+    skill_name: str
+    category: str
+    evidence_level: int
+    confidence: float
+    excerpt: str
+    locator: str
+    source_type: str
+
+
+class SkillGraphResponse(BaseModel):
+    role_family: str
+    evidence: list[SkillEvidenceResponse]
+
+
+class RoleFitContribution(BaseModel):
+    skill_slug: str
+    skill_name: str
+    weight: float
+    required: bool
+    evidence_level: int
+    normalized_score: float
+    weighted_score: float
+
+
+class RoleFitResponse(BaseModel):
+    role_family: str
+    score: float
+    coverage: float
+    evidence_depth: float
+    cap_applied: bool
+    contributions: list[RoleFitContribution]
+
+
 class EvidenceSourceInput(BaseModel):
     source_type: Literal["github", "portfolio"]
     source_reference: HttpUrl

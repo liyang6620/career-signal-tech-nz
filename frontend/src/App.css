@@ -670,6 +670,33 @@ select {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+.evidence-graph-panel {
+  margin-top: 20px;
+  padding: 24px;
+  border: 1px solid #dfe4e1;
+  background: #fff;
+}
+.fit-summary {
+  display: flex;
+  gap: 34px;
+  margin: 20px 0;
+  padding: 16px 0;
+  border-top: 1px solid #edf0f1;
+  border-bottom: 1px solid #edf0f1;
+}
+.fit-summary div { display: grid; gap: 3px; }
+.fit-summary span, .fit-summary small { color: #69727c; font-size: 10px; }
+.fit-summary strong { color: #1f5c45; font-size: 24px; line-height: 1; }
+.skill-network { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.skill-node { display: grid; gap: 7px; padding: 12px; border: 1px solid #dfe4e1; background: #fbfcfb; }
+.skill-node > div { display: flex; justify-content: space-between; gap: 8px; }
+.skill-node b { color: #283039; font-size: 11px; }
+.skill-node em { color: #a2682e; font-size: 9px; font-style: normal; }
+.skill-node span { color: #69727c; font-size: 10px; }
+.skill-node i { display: block; height: 4px; background: #e4e9e5; }
+.skill-node u { display: block; height: 4px; background: #4e8b70; text-decoration: none; }
+.skill-node.missing u { background: #c7ceca; }
+.fit-warning { margin: 14px 0 0; color: #8a5d2d; font-size: 11px; line-height: 1.5; }
 @media (max-width: 720px) {
   .product-shell {
     grid-template-columns: 1fr;
@@ -729,6 +756,8 @@ select {
     flex-direction: column-reverse;
     gap: 8px;
   }
+  .skill-network { grid-template-columns: 1fr; }
+  .fit-summary { gap: 18px; }
 }
 @media (max-width: 420px) {
   .setup-header > span {
