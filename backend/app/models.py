@@ -329,3 +329,21 @@ class JobChunk(Base):
     embedding_model: Mapped[str] = mapped_column(String(120))
     embedding: Mapped[list[float]] = mapped_column(Vector(384))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RetrievalJudgement(Base):
+    __tablename__ = "rag_retrieval_judgements"
+    __table_args__ = (UniqueConstraint("user_id", "query_hash", "chunk_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    chunk_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("rag_job_chunks.id", ondelete="CASCADE"), index=True)
+    query_hash: Mapped[str] = mapped_column(String(64), index=True)
+    query_text: Mapped[str] = mapped_column(String(500))
+    role_family: Mapped[str | None] = mapped_column(String(80))
+    location: Mapped[str | None] = mapped_column(String(120))
+    seniority: Mapped[str | None] = mapped_column(String(50))
+    result_rank: Mapped[int] = mapped_column(Integer)
+    relevant: Mapped[bool] = mapped_column(Boolean)
+    notes: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

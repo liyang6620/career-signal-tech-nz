@@ -396,3 +396,23 @@ class RagEvaluationResponse(BaseModel):
     recall_at_k: float | None
     mean_reciprocal_rank: float | None
     failures: list[dict[str, str]]
+
+
+class RetrievalJudgementRequest(BaseModel):
+    citation_id: UUID
+    query: str = Field(min_length=3, max_length=500)
+    role_family: str | None = Field(default=None, max_length=80)
+    location: str | None = Field(default=None, max_length=120)
+    seniority: str | None = Field(default=None, max_length=50)
+    result_rank: int = Field(ge=1, le=20)
+    relevant: bool
+    notes: str | None = Field(default=None, max_length=500)
+
+
+class RetrievalJudgementResponse(BaseModel):
+    id: UUID
+    citation_id: UUID
+    relevant: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

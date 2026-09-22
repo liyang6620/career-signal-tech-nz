@@ -44,6 +44,7 @@ from .models import (
     OneTimeToken,
     ProcessingJob,
     RefreshSession,
+    RetrievalJudgement,
     User,
 )
 from .rag import embed_query, index_job_postings, search_job_evidence
@@ -78,6 +79,8 @@ from .schemas import (
     RagIndexResponse,
     RegisterRequest,
     ResetPasswordRequest,
+    RetrievalJudgementRequest,
+    RetrievalJudgementResponse,
     RoleDecodeRequest,
     RoleDecodeResponse,
     RoleFamily,
@@ -654,7 +657,7 @@ def search_market_evidence(
     )
     citations = [
         EvidenceCitation(
-            citation_id=f"J{index}",
+            citation_id=str(row["id"]),
             title=row["title"],
             company=row["company"],
             location=row["location"],
@@ -668,6 +671,38 @@ def search_market_evidence(
         for index, row in enumerate(rows, start=1)
     ]
     return EvidenceSearchResponse(query=payload.query, result_count=len(citations), citations=citations)
+
+
+@app.post("/api/v1/rag/judgements", response_model=RetrievalJudgementResponse, status_code=status.HTTP_201_CREATED)
+def create_retrieval_judgement(
+    payload: RetrievalJudgementRequest,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> RetrievalJudgement:
+    chunk = db.get(JobChunk, payload.citation_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Citation is no longer available")
+    query_hash = hashlib.sha256(payload.query.strip().casefold().encode()).hexdigest()
+    judgement = db.scalar(
+        select(RetrievalJudgement).where(
+            RetrievalJudgement.user_id == user.id,
+            RetrievalJudgement.query_hash == query_hash,
+            RetrievalJudgement.chunk_id == chunk.id,
+        )
+    )
+    if judgement is None:
+        judgement = RetrievalJudgement(user_id=user.id, chunk_id=chunk.id, query_hash=query_hash)
+        db.add(judgement)
+    judgement.query_text = payload.query.strip()
+    judgement.role_family = payload.role_family
+    judgement.location = payload.location
+    judgement.seniority = payload.seniority
+    judgement.result_rank = payload.result_rank
+    judgement.relevant = payload.relevant
+    judgement.notes = payload.notes
+    db.commit()
+    db.refresh(judgement)
+    return judgement
 
 
 @app.post("/api/v1/rag/evaluate", response_model=RagEvaluationResponse)
