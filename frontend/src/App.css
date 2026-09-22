@@ -176,7 +176,17 @@ select {
 .welcome-journey li strong { color: #283039; font-size: 12px; }
 .welcome-journey li span { margin-top: 7px; color: #707983; font-size: 11px; line-height: 1.5; }
 .welcome-trust { display: flex; align-items: center; gap: 7px; margin: 22px 0 35px; color: #758078; font-size: 10px; }
-@media (max-width: 700px) { .welcome-nav-links { display: none; } .welcome-hero { padding: 58px 0 48px; } .welcome-hero h1 { font-size: 38px; } .welcome-lede { font-size: 15px; } .welcome-grid { grid-template-columns: 1fr; } .welcome-grid article, .welcome-grid article:not(:first-child) { min-height: auto; padding: 22px 0; border-right: 0; border-bottom: 1px solid #dfe4e1; } .welcome-grid article:last-child { border-bottom: 0; } .welcome-journey { grid-template-columns: 1fr; gap: 25px; padding-top: 35px; } .welcome-journey ol { grid-template-columns: 1fr; gap: 18px; } .auth-back { font-size: 10px; } }
+.ai-action { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:20px 0; padding:16px 18px; border:1px solid #cfe0d6; background:#f3f8f5; }
+.ai-action strong, .ai-action span { display:block; }
+.ai-action strong { color:#283039; font-size:12px; }
+.ai-action span { margin-top:5px; color:#68727c; font-size:10px; }
+.secondary-button { border:1px solid #1f6348; background:#fff; color:#1f6348; padding:9px 13px; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; }
+.secondary-button:disabled { opacity:.55; cursor:wait; }
+.ai-explanation { margin:20px 0; padding:20px; border-left:3px solid #1f6348; background:#fff; }
+.ai-explanation > div { display:flex; justify-content:space-between; color:#1f6348; font-size:10px; font-weight:700; letter-spacing:.06em; }
+.ai-explanation small { color:#87918a; font-size:9px; font-weight:500; letter-spacing:0; }
+.ai-explanation p { margin:13px 0 0; color:#3d464d; font-size:12px; line-height:1.7; white-space:pre-wrap; }
+@media (max-width: 700px) { .welcome-nav-links { display: none; } .welcome-hero { padding: 58px 0 48px; } .welcome-hero h1 { font-size: 38px; } .welcome-lede { font-size: 15px; } .welcome-grid { grid-template-columns: 1fr; } .welcome-grid article, .welcome-grid article:not(:first-child) { min-height: auto; padding: 22px 0; border-right: 0; border-bottom: 1px solid #dfe4e1; } .welcome-grid article:last-child { border-bottom: 0; } .welcome-journey { grid-template-columns: 1fr; gap: 25px; padding-top: 35px; } .welcome-journey ol { grid-template-columns: 1fr; gap: 18px; } .auth-back { font-size: 10px; } .ai-action { align-items:flex-start; flex-direction:column; } }
 .product-shell {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
