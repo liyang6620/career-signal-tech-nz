@@ -282,3 +282,33 @@ class JobPostingSkill(Base):
     posting_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("job_postings.id", ondelete="CASCADE"), index=True)
     skill_slug: Mapped[str] = mapped_column(ForeignKey("canonical_skills.slug"), index=True)
     mention_count: Mapped[int] = mapped_column(Integer)
+
+
+class CollectorSource(Base):
+    __tablename__ = "collector_sources"
+    __table_args__ = (UniqueConstraint("adapter", "identifier"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(160))
+    adapter: Mapped[str] = mapped_column(String(30), index=True)
+    identifier: Mapped[str] = mapped_column(Text)
+    company: Mapped[str] = mapped_column(String(180))
+    permission_basis: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CollectorRun(Base):
+    __tablename__ = "collector_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    collector_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("collector_sources.id", ondelete="CASCADE"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    fetched_count: Mapped[int] = mapped_column(Integer, default=0)
+    accepted_count: Mapped[int] = mapped_column(Integer, default=0)
+    rejected_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

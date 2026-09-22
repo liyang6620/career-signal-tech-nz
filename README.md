@@ -65,7 +65,7 @@ Missing required skills cap a dimension score. The API returns all contributions
 - Project evidence: public GitHub repository snapshots, conservative README/language/topic matching, explicit review
 - Market intelligence: governed posting imports, provenance and permission metadata, deterministic role decoding
 - Data/RAG: PostgreSQL 16 + pgvector; local embeddings by default
-- Analytics/ingestion (planned): DuckDB, Parquet, Python collectors and APScheduler
+- Analytics/ingestion: governed Greenhouse, Lever and schema.org collectors; DuckDB, Parquet and scheduling remain planned
 - AI: optional OpenAI Responses API with Structured Outputs and cited context
 - Delivery: Docker Compose and GitHub Actions
 
@@ -117,7 +117,9 @@ CI runs the same checks on every pull request and push to `main`.
 
 ## Data acquisition and compliance
 
-Planned ingestion uses public company career pages, permitted Greenhouse/Lever endpoints, `schema.org/JobPosting`, Careers NZ and MBIE aggregates, and explicitly licensed datasets. Collectors must retain provenance and respect source terms, robots directives, rate limits, privacy, and takedown requirements. The project will not bypass authentication, CAPTCHAs, robots restrictions, or platform controls, and does not depend on a paid SEEK API.
+Governed ingestion supports permitted Greenhouse and Lever job-board endpoints plus `schema.org/JobPosting` on a configured HTTPS company careers page. Every collector source requires a recorded permission basis, and every bounded run retains its status, accepted/rejected counts, timestamps and a bounded failure reason. Only records with an explicit New Zealand location are accepted. Manual permitted imports use the same deterministic classification, hashing, URL upsert and skill-replacement path.
+
+The collectors are admin-triggered and synchronous with a 20-second network timeout; recurring scheduling, retry orchestration and source-specific rate policies are not implemented yet. Operators remain responsible for confirming source terms, robots directives, rate limits and takedown requirements before registration. The project does not scrape SEEK, bypass authentication, CAPTCHAs or platform controls, and does not claim complete New Zealand market coverage.
 
 ## Roadmap
 
@@ -131,7 +133,7 @@ Planned ingestion uses public company career pages, permitted Greenhouse/Lever e
 
 ## Production-readiness status
 
-The repository currently provides a tested foundation rather than claiming production operation. Authentication, private CV ingestion, public GitHub evidence, explicit evidence review, a canonical skill taxonomy, deterministic role fit, governed job-posting imports, Role Decoder and a live-data-only Market Explorer are implemented. Market imports require a separate ingestion credential and retain source URL, permission basis, retrieval time and content hash. The explorer intentionally shows an empty state until permitted records are loaded; it never substitutes demonstration counts. OCR, embeddings, semantic evidence inference, repository code inspection and production market collectors are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
+The repository currently provides a tested foundation rather than claiming production operation. Authentication, private CV ingestion, public GitHub evidence, explicit evidence review, a canonical skill taxonomy, deterministic role fit, governed job-posting imports and collectors, Role Decoder and a live-data-only Market Explorer are implemented. Market writes require a separate ingestion credential and retain source URL, permission basis, retrieval time and content hash. Collector runs and data-quality indicators expose freshness, rejection, missing-date, stale-record and classification-confidence risks. The explorer intentionally shows an empty state until permitted records are loaded; it never substitutes demonstration counts. OCR, embeddings, semantic evidence inference, repository code inspection, scheduled ingestion and broad live-market coverage are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
 
 ## License
 

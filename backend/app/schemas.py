@@ -301,3 +301,49 @@ class MarketSummaryResponse(BaseModel):
     roles: list[dict[str, str | int]]
     top_skills: list[dict[str, str | int]]
     locations: list[dict[str, str | int]]
+
+
+class CollectorSourceRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    adapter: Literal["greenhouse", "lever", "schema-org"]
+    identifier: str = Field(min_length=1, max_length=2000)
+    company: str = Field(min_length=1, max_length=180)
+    permission_basis: str = Field(min_length=10, max_length=1000)
+
+
+class CollectorSourceResponse(BaseModel):
+    id: UUID
+    name: str
+    adapter: str
+    identifier: str
+    company: str
+    permission_basis: str
+    enabled: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CollectorRunResponse(BaseModel):
+    id: UUID
+    collector_source_id: UUID
+    status: str
+    fetched_count: int
+    accepted_count: int
+    rejected_count: int
+    error_message: str | None
+    started_at: datetime
+    completed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class MarketQualityResponse(BaseModel):
+    posting_count: int
+    missing_publication_date_percent: float
+    low_confidence_count: int
+    stale_posting_count: int
+    duplicate_url_count: int
+    collector_completed_count: int
+    collector_failed_count: int
+    sources: list[dict[str, str | int | bool | None]]

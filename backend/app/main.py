@@ -19,6 +19,7 @@ from .auth import (
     verified_user,
     verify_password,
 )
+from .collectors import collect, is_new_zealand_location
 from .config import get_settings
 from .database import get_db
 from .github import fetch_snapshot, suggest_github_evidence
@@ -28,6 +29,8 @@ from .models import (
     CanonicalSkill,
     CareerProfile,
     CareerTarget,
+    CollectorRun,
+    CollectorSource,
     DocumentExtraction,
     EvidenceSource,
     EvidenceSuggestion,
@@ -45,6 +48,9 @@ from .models import (
 from .role_decoder import ROLE_LABELS, decode_role
 from .schemas import (
     AuthResponse,
+    CollectorRunResponse,
+    CollectorSourceRequest,
+    CollectorSourceResponse,
     DeleteAccountRequest,
     DimensionScoreRequest,
     DimensionScoreResponse,
@@ -53,8 +59,11 @@ from .schemas import (
     ExtractionResponse,
     GithubProjectRequest,
     GithubProjectResponse,
+    JobPostingInput,
     LoginRequest,
     MarketImportRequest,
+    MarketQualityResponse,
+    MarketSourceInput,
     MarketSummaryResponse,
     ProfileResponse,
     ProfileSetupRequest,
@@ -351,25 +360,38 @@ def role_decoder(payload: RoleDecodeRequest, user: Annotated[User, Depends(verif
     )
 
 
-@app.post("/api/v1/market/import", status_code=status.HTTP_202_ACCEPTED)
-def import_market_postings(
-    payload: MarketImportRequest,
-    db: Annotated[Session, Depends(get_db)],
-    ingestion_key: Annotated[str | None, Header(alias="X-Ingestion-Key")] = None,
-) -> dict[str, int]:
+def require_ingestion_key(ingestion_key: str | None) -> None:
     if ingestion_key != settings.ingestion_api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid ingestion credential")
-    source = MarketSource(
-        name=payload.source.name,
-        source_type=payload.source.source_type,
-        permission_basis=payload.source.permission_basis,
-        base_url=str(payload.source.base_url),
+
+
+def persist_market_postings(
+    db: Session,
+    source_input: MarketSourceInput,
+    postings: list[JobPostingInput],
+) -> dict[str, int]:
+    base_url = str(source_input.base_url)
+    source = db.scalar(
+        select(MarketSource).where(
+            MarketSource.name == source_input.name,
+            MarketSource.source_type == source_input.source_type,
+            MarketSource.base_url == base_url,
+        )
     )
-    db.add(source)
-    db.flush()
+    if source is None:
+        source = MarketSource(
+            name=source_input.name,
+            source_type=source_input.source_type,
+            permission_basis=source_input.permission_basis,
+            base_url=base_url,
+        )
+        db.add(source)
+        db.flush()
+    else:
+        source.permission_basis = source_input.permission_basis
     imported = 0
     updated = 0
-    for item in payload.postings:
+    for item in postings:
         source_url = str(item.source_url)
         content_hash = hashlib.sha256(f"{item.title}\n{item.description}".encode()).hexdigest()
         posting = db.scalar(select(JobPosting).where(JobPosting.source_url == source_url))
@@ -379,6 +401,7 @@ def import_market_postings(
             db.add(posting)
             imported += 1
         else:
+            posting.source_id = source.id
             db.execute(delete(JobPostingSkill).where(JobPostingSkill.posting_id == posting.id))
             updated += 1
         posting.content_hash = content_hash
@@ -395,8 +418,110 @@ def import_market_postings(
             JobPostingSkill(posting_id=posting.id, skill_slug=slug, mention_count=count)
             for slug, _, count in decoded.matched_skills
         )
-    db.commit()
     return {"imported": imported, "updated": updated}
+
+
+@app.post("/api/v1/market/import", status_code=status.HTTP_202_ACCEPTED)
+def import_market_postings(
+    payload: MarketImportRequest,
+    db: Annotated[Session, Depends(get_db)],
+    ingestion_key: Annotated[str | None, Header(alias="X-Ingestion-Key")] = None,
+) -> dict[str, int]:
+    require_ingestion_key(ingestion_key)
+    result = persist_market_postings(db, payload.source, payload.postings)
+    db.commit()
+    return result
+
+
+@app.post(
+    "/api/v1/market/collectors",
+    response_model=CollectorSourceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_collector_source(
+    payload: CollectorSourceRequest,
+    db: Annotated[Session, Depends(get_db)],
+    ingestion_key: Annotated[str | None, Header(alias="X-Ingestion-Key")] = None,
+) -> CollectorSource:
+    require_ingestion_key(ingestion_key)
+    existing = db.scalar(
+        select(CollectorSource).where(
+            CollectorSource.adapter == payload.adapter,
+            CollectorSource.identifier == payload.identifier,
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Collector source already exists")
+    source = CollectorSource(**payload.model_dump())
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    return source
+
+
+@app.get("/api/v1/market/collectors", response_model=list[CollectorSourceResponse])
+def list_collector_sources(
+    db: Annotated[Session, Depends(get_db)],
+    ingestion_key: Annotated[str | None, Header(alias="X-Ingestion-Key")] = None,
+) -> list[CollectorSource]:
+    require_ingestion_key(ingestion_key)
+    return list(db.scalars(select(CollectorSource).order_by(CollectorSource.created_at.desc())))
+
+
+@app.post("/api/v1/market/collectors/{source_id}/run", response_model=CollectorRunResponse)
+def run_collector_source(
+    source_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    ingestion_key: Annotated[str | None, Header(alias="X-Ingestion-Key")] = None,
+) -> CollectorRun:
+    require_ingestion_key(ingestion_key)
+    source = db.get(CollectorSource, source_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collector source not found")
+    if not source.enabled:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Collector source is disabled")
+    run = CollectorRun(collector_source_id=source.id, status="running")
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    try:
+        collected = collect(source.adapter, source.identifier, source.company)
+        accepted = [item for item in collected if is_new_zealand_location(item.location)]
+        valid: list[JobPostingInput] = []
+        for item in accepted:
+            try:
+                valid.append(JobPostingInput.model_validate(item.__dict__))
+            except ValueError:
+                continue
+        source_type = source.adapter if source.adapter in {"greenhouse", "lever"} else "company-careers"
+        base_url = source.identifier if source.adapter == "schema-org" else f"https://{source.adapter}.io"
+        persist_market_postings(
+            db,
+            MarketSourceInput(
+                name=source.name,
+                source_type=source_type,
+                permission_basis=source.permission_basis,
+                base_url=base_url,
+            ),
+            valid,
+        )
+        run.fetched_count = len(collected)
+        run.accepted_count = len(valid)
+        run.rejected_count = len(collected) - len(valid)
+        run.status = "completed"
+        run.completed_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(run)
+        return run
+    except Exception as exc:
+        db.rollback()
+        run = db.get(CollectorRun, run.id)
+        if run is not None:
+            run.status = "failed"
+            run.error_message = str(exc)[:1000]
+            run.completed_at = datetime.now(UTC)
+            db.commit()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Collector run failed") from exc
 
 
 @app.get("/api/v1/market/summary", response_model=MarketSummaryResponse)
@@ -425,6 +550,62 @@ def market_summary(
         roles=[{"role_family": role, "count": count} for role, count in roles],
         locations=[{"location": location, "count": count} for location, count in locations],
         top_skills=[{"skill_slug": slug, "skill_name": SKILLS[slug][0], "count": count} for slug, count in skills],
+    )
+
+
+@app.get("/api/v1/market/quality", response_model=MarketQualityResponse)
+def market_quality(
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> MarketQualityResponse:
+    posting_count = db.scalar(select(func.count(JobPosting.id))) or 0
+    missing_dates = db.scalar(
+        select(func.count(JobPosting.id)).where(JobPosting.published_at.is_(None))
+    ) or 0
+    stale_before = datetime.now(UTC) - timedelta(days=90)
+    sources = list(db.scalars(select(CollectorSource).order_by(CollectorSource.name)))
+    source_quality: list[dict[str, str | int | bool | None]] = []
+    for source in sources:
+        latest = db.scalar(
+            select(CollectorRun)
+            .where(CollectorRun.collector_source_id == source.id)
+            .order_by(CollectorRun.started_at.desc())
+            .limit(1)
+        )
+        source_quality.append(
+            {
+                "name": source.name,
+                "adapter": source.adapter,
+                "enabled": source.enabled,
+                "latest_status": latest.status if latest else None,
+                "last_run_at": latest.started_at.isoformat() if latest else None,
+                "accepted_count": latest.accepted_count if latest else 0,
+                "rejected_count": latest.rejected_count if latest else 0,
+            }
+        )
+    return MarketQualityResponse(
+        posting_count=posting_count,
+        missing_publication_date_percent=round((missing_dates / posting_count * 100) if posting_count else 0, 1),
+        low_confidence_count=db.scalar(
+            select(func.count(JobPosting.id)).where(JobPosting.classification_confidence < 0.5)
+        )
+        or 0,
+        stale_posting_count=db.scalar(
+            select(func.count(JobPosting.id)).where(
+                JobPosting.published_at.is_not(None), JobPosting.published_at < stale_before
+            )
+        )
+        or 0,
+        duplicate_url_count=0,
+        collector_completed_count=db.scalar(
+            select(func.count(CollectorRun.id)).where(CollectorRun.status == "completed")
+        )
+        or 0,
+        collector_failed_count=db.scalar(
+            select(func.count(CollectorRun.id)).where(CollectorRun.status == "failed")
+        )
+        or 0,
+        sources=source_quality,
     )
 
 

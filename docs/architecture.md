@@ -65,7 +65,10 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
 - Each posting retains its canonical source URL, content hash, publication time and retrieval time.
 - Role family, seniority and skill mentions are produced by a versioned deterministic classifier over responsibilities.
 - Market Explorer aggregates only persisted governed records and shows an explicit empty state when none exist.
-- This release supports permitted structured imports. Automated collectors and source-specific reliability reports remain future work.
+- Permitted Greenhouse, Lever and schema.org adapters share the same persistence path as structured imports and conservatively reject records without an explicit New Zealand location.
+- Collector source configuration records the permission basis; each bounded run records success/failure, counts and timestamps.
+- Market quality reporting exposes source freshness, missing publication dates, stale records and low-confidence deterministic classifications.
+- Collector runs are currently synchronous admin operations. Scheduling, durable retries and per-source rate policies remain future work.
 
 ## Scoring
 
