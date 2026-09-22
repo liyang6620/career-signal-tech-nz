@@ -62,6 +62,7 @@ Missing required skills cap a dimension score. The API returns all contributions
 - Persistence/auth: SQLAlchemy, Alembic, Argon2, short-lived JWT access tokens and rotated refresh sessions
 - Private files: S3-compatible object storage, presigned direct uploads, ClamAV, durable PostgreSQL work queue
 - Document evidence: local PDF/DOCX parsing, versioned deterministic skill matching, user-confirmed evidence review
+- Project evidence: public GitHub repository snapshots, conservative README/language/topic matching, explicit review
 - Data/RAG: PostgreSQL 16 + pgvector; local embeddings by default
 - Analytics/ingestion (planned): DuckDB, Parquet, Python collectors and APScheduler
 - AI: optional OpenAI Responses API with Structured Outputs and cited context
@@ -121,7 +122,7 @@ Planned ingestion uses public company career pages, permitted Greenhouse/Lever e
 
 1. Versioned job, skill, source, and candidate-evidence schema with migrations.
 2. Compliant job ingestion, deduplication, freshness monitoring, and data-quality reports.
-3. OCR and GitHub evidence extraction with user confirmation and provenance.
+3. OCR and deeper GitHub repository inspection with user confirmation and provenance.
 4. pgvector retrieval with locally generated embeddings and citation evaluation.
 5. OpenAI explanation layer with typed outputs, cost budgets, and regression evals.
 6. Telemetry, backups, restore drills, and deployment runbooks.
@@ -129,7 +130,7 @@ Planned ingestion uses public company career pages, permitted Greenhouse/Lever e
 
 ## Production-readiness status
 
-The repository currently provides a tested foundation rather than claiming production operation. Authentication, email verification, password reset, persistent abuse controls, security audit events, revocable sessions, user-scoped profile persistence, account export/deletion, private S3-compatible CV storage, signed direct uploads, malware scanning, a durable PostgreSQL job queue, local PDF/DOCX parsing and user-reviewed skill suggestions are implemented. The parser stores a document fingerprint and short evidence excerpts rather than a second full-text CV copy. OCR, embeddings, semantic evidence inference and GitHub extraction are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
+The repository currently provides a tested foundation rather than claiming production operation. Authentication, private CV ingestion, malware scanning, local PDF/DOCX parsing, public GitHub repository snapshots, explicit evidence review, a canonical skill taxonomy and deterministic role-fit calculations are implemented. The CV parser stores a document fingerprint and short evidence excerpts rather than a second full-text copy. GitHub matching is intentionally conservative: repository language, topics and README text can propose level-2 evidence, but never prove mastery without user review. OCR, embeddings, semantic evidence inference and repository code inspection are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
 
 ## License
 

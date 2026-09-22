@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
+from app.github import GithubSnapshot
 from app.main import app
 from app.models import DocumentExtraction, EvidenceSuggestion, EvidenceUpload
 
@@ -333,3 +334,50 @@ def test_extracted_evidence_requires_owner_and_complete_review(
     )
     assert deleted.status_code == 204
     assert len(deleted_keys) == 1
+
+
+def test_public_github_evidence_is_reviewed_and_included_in_fit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "app.main.fetch_snapshot",
+        lambda url: GithubSnapshot(
+            owner="candidate",
+            repository="api-project",
+            canonical_url="https://github.com/candidate/api-project",
+            description="Production API",
+            default_branch="main",
+            stars=3,
+            language="Python",
+            topics=["fastapi", "docker"],
+            readme="Built a FastAPI REST API with Docker and automated testing.",
+        ),
+    )
+    auth = register(client)
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+    created = client.post(
+        "/api/v1/evidence/github",
+        headers=headers,
+        json={"url": "https://github.com/candidate/api-project"},
+    )
+    assert created.status_code == 201
+    project = created.json()
+    assert project["status"] == "awaiting_review"
+    assert any(item["canonical_skill"] == "FastAPI" for item in project["suggestions"])
+    reviewed = client.post(
+        f"/api/v1/evidence/github/{project['id']}/review",
+        headers=headers,
+        json={
+            "decisions": [
+                {"suggestion_id": item["id"], "decision": "confirmed"}
+                for item in project["suggestions"]
+            ]
+        },
+    )
+    assert reviewed.status_code == 200
+    assert reviewed.json()["status"] == "reviewed"
+    fit = client.get("/api/v1/evidence/fit?role_family=ai", headers=headers)
+    assert fit.status_code == 200
+    assert any(item["evidence_level"] == 2 for item in fit.json()["contributions"])
+    graph = client.get("/api/v1/evidence/graph?role_family=ai", headers=headers)
+    assert any(item["source_type"] == "github" for item in graph.json()["evidence"])

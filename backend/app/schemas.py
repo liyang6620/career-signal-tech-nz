@@ -195,6 +195,36 @@ class RoleFitResponse(BaseModel):
     contributions: list[RoleFitContribution]
 
 
+class GithubProjectRequest(BaseModel):
+    url: HttpUrl
+
+
+class GithubSuggestionResponse(BaseModel):
+    id: UUID
+    canonical_skill: str
+    category: str
+    excerpt: str
+    confidence: float
+    proposed_level: int
+    review_status: str
+
+    model_config = {"from_attributes": True}
+
+
+class GithubProjectResponse(BaseModel):
+    id: UUID
+    canonical_url: str
+    repository: str
+    description: str | None
+    stars: int
+    language: str | None
+    topics: list[str]
+    status: str
+    suggestions: list[GithubSuggestionResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
 class EvidenceSourceInput(BaseModel):
     source_type: Literal["github", "portfolio"]
     source_reference: HttpUrl

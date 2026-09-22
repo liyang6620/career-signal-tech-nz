@@ -50,6 +50,14 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
 - Suggestions remain `pending` until the document owner explicitly confirms or rejects every item.
 - Confirmed suggestions are reviewable evidence inputs, not claims of mastery. OCR and semantic inference remain future stages.
 
+## Public project evidence
+
+- GitHub repository URLs are parsed into owner/repository identifiers before requests are made to the fixed GitHub API host.
+- Only public, active repositories are accepted. Repository metadata, topics and a bounded README snapshot are retained with provenance.
+- Deterministic taxonomy aliases may propose conservative level-2 evidence; language detection alone never raises the level.
+- The owner must review every suggestion before it enters the shared candidate evidence graph.
+- Role fit selects the strongest confirmed evidence per skill across CV and GitHub sources without double-counting it.
+
 ## Scoring
 
 Each assessment is bound to target role, location, seniority, and market window. A skill contribution is:

@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -19,6 +20,7 @@ from .auth import (
 )
 from .config import get_settings
 from .database import get_db
+from .github import fetch_snapshot, suggest_github_evidence
 from .mailer import send_email
 from .models import (
     CandidateSkillEvidence,
@@ -29,6 +31,8 @@ from .models import (
     EvidenceSource,
     EvidenceSuggestion,
     EvidenceUpload,
+    GithubProject,
+    GithubSuggestion,
     OneTimeToken,
     ProcessingJob,
     RefreshSession,
@@ -42,6 +46,8 @@ from .schemas import (
     EmailRequest,
     EvidenceReviewRequest,
     ExtractionResponse,
+    GithubProjectRequest,
+    GithubProjectResponse,
     LoginRequest,
     ProfileResponse,
     ProfileSetupRequest,
@@ -60,7 +66,7 @@ from .schemas import (
 from .scoring import calculate_dimension_score
 from .security_events import actor_fingerprint, audit, enforce_event_limit, enforce_login_limit
 from .storage import delete_object, ensure_bucket, object_metadata, presigned_put
-from .taxonomy import ROLE_REQUIREMENTS, slug_for_name
+from .taxonomy import ROLE_REQUIREMENTS, SKILLS, slug_for_name
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
@@ -555,27 +561,114 @@ def evidence_graph(
 ) -> SkillGraphResponse:
     if role_family not in ROLE_REQUIREMENTS:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown role family")
-    rows = db.execute(
-        select(CandidateSkillEvidence, CanonicalSkill)
-        .join(CanonicalSkill, CanonicalSkill.slug == CandidateSkillEvidence.skill_slug)
+    items = list(db.scalars(
+        select(CandidateSkillEvidence)
         .where(CandidateSkillEvidence.user_id == user.id)
-        .order_by(CanonicalSkill.category, CanonicalSkill.name)
-    ).all()
+        .order_by(CandidateSkillEvidence.skill_slug)
+    ))
     return SkillGraphResponse(
         role_family=role_family,
         evidence=[
             SkillEvidenceResponse(
-                skill_slug=skill.slug,
-                skill_name=skill.name,
-                category=skill.category,
+                skill_slug=item.skill_slug,
+                skill_name=SKILLS[item.skill_slug][0],
+                category=SKILLS[item.skill_slug][1],
                 evidence_level=item.evidence_level,
                 confidence=item.confidence,
                 excerpt=item.excerpt,
                 locator=item.locator,
                 source_type=item.source_type,
             )
-            for item, skill in rows
+            for item in items
         ],
+    )
+
+
+@app.post("/api/v1/evidence/github", response_model=GithubProjectResponse, status_code=status.HTTP_201_CREATED)
+def add_github_project(
+    payload: GithubProjectRequest,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> GithubProjectResponse:
+    try:
+        snapshot = fetch_snapshot(str(payload.url))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    existing = db.scalar(
+        select(GithubProject).where(
+            GithubProject.user_id == user.id,
+            GithubProject.canonical_url == snapshot.canonical_url,
+        )
+    )
+    if existing:
+        project = existing
+        db.query(GithubSuggestion).filter(GithubSuggestion.project_id == project.id).delete()
+    else:
+        project = GithubProject(user_id=user.id, **{key: value for key, value in {
+            "canonical_url": snapshot.canonical_url, "owner": snapshot.owner, "repository": snapshot.repository,
+            "description": snapshot.description, "default_branch": snapshot.default_branch, "stars": snapshot.stars,
+            "language": snapshot.language, "topics": json.dumps(snapshot.topics), "readme_excerpt": snapshot.readme,
+        }.items()})
+        db.add(project)
+        db.flush()
+    for name, category, excerpt, confidence, level in suggest_github_evidence(snapshot):
+        db.add(
+            GithubSuggestion(
+                project_id=project.id,
+                canonical_skill=name,
+                category=category,
+                excerpt=excerpt,
+                confidence=confidence,
+                proposed_level=level,
+            )
+        )
+    project.status = "awaiting_review"
+    audit(db, "evidence.github_added", user_id=user.id, metadata={"project_id": str(project.id)})
+    db.commit()
+    db.refresh(project)
+    suggestions = list(db.scalars(select(GithubSuggestion).where(GithubSuggestion.project_id == project.id)))
+    return GithubProjectResponse(
+        id=project.id, canonical_url=project.canonical_url, repository=project.repository,
+        description=project.description, stars=project.stars, language=project.language,
+        topics=json.loads(project.topics), status=project.status, suggestions=suggestions,
+    )
+
+
+@app.post("/api/v1/evidence/github/{project_id}/review", response_model=GithubProjectResponse)
+def review_github_project(
+    project_id: UUID,
+    payload: EvidenceReviewRequest,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> GithubProjectResponse:
+    project = db.scalar(select(GithubProject).where(GithubProject.id == project_id, GithubProject.user_id == user.id))
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="GitHub project not found")
+    if project.status != "awaiting_review":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="GitHub evidence is not awaiting review")
+    suggestions = list(db.scalars(select(GithubSuggestion).where(GithubSuggestion.project_id == project.id)))
+    decisions = {decision.suggestion_id: decision.decision for decision in payload.decisions}
+    if set(decisions) != {suggestion.id for suggestion in suggestions}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Review every suggestion once")
+    reviewed_at = datetime.now(UTC)
+    for suggestion in suggestions:
+        suggestion.review_status = decisions[suggestion.id]
+        suggestion.reviewed_at = reviewed_at
+        if decisions[suggestion.id] == "confirmed":
+            skill_slug = slug_for_name(suggestion.canonical_skill)
+            if skill_slug:
+                db.add(CandidateSkillEvidence(
+                    user_id=user.id, github_project_id=project.id, github_suggestion_id=suggestion.id,
+                    skill_slug=skill_slug, evidence_level=suggestion.proposed_level, confidence=suggestion.confidence,
+                    excerpt=suggestion.excerpt, locator=project.canonical_url, source_type="github",
+                ))
+    project.status = "reviewed"
+    audit(db, "evidence.github_reviewed", user_id=user.id, metadata={"project_id": str(project.id)})
+    db.commit()
+    return GithubProjectResponse(
+        id=project.id, canonical_url=project.canonical_url, repository=project.repository,
+        description=project.description, stars=project.stars, language=project.language,
+        topics=json.loads(project.topics), status=project.status, suggestions=suggestions,
     )
 
 
@@ -588,10 +681,11 @@ def evidence_fit(
     requirements = ROLE_REQUIREMENTS.get(role_family)
     if requirements is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown role family")
-    evidence = {
-        item.skill_slug: item
-        for item in db.scalars(select(CandidateSkillEvidence).where(CandidateSkillEvidence.user_id == user.id))
-    }
+    evidence = {}
+    for item in db.scalars(select(CandidateSkillEvidence).where(CandidateSkillEvidence.user_id == user.id)):
+        current = evidence.get(item.skill_slug)
+        if current is None or item.evidence_level * item.confidence > current.evidence_level * current.confidence:
+            evidence[item.skill_slug] = item
     skills = {
         skill.slug: skill
         for skill in db.scalars(
@@ -613,7 +707,8 @@ def evidence_fit(
         level = item.evidence_level if item else 0
         normalized = round((level / 5) * (item.confidence if item else 0) * 100, 2)
         contributions.append({
-            "skill_slug": slug, "skill_name": skills[slug].name, "weight": weight, "required": required,
+            "skill_slug": slug, "skill_name": skills[slug].name if slug in skills else SKILLS[slug][0],
+            "weight": weight, "required": required,
             "evidence_level": level, "normalized_score": normalized, "weighted_score": round(normalized * weight, 2),
         })
     score = coverage * 0.65 + depth * 0.35

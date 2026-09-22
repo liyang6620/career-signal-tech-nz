@@ -190,9 +190,17 @@ class CandidateSkillEvidence(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    upload_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evidence_uploads.id", ondelete="CASCADE"), index=True)
-    suggestion_id: Mapped[uuid.UUID] = mapped_column(
+    upload_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("evidence_uploads.id", ondelete="CASCADE"), index=True
+    )
+    github_project_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("github_projects.id", ondelete="CASCADE"), index=True
+    )
+    suggestion_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("evidence_suggestions.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    github_suggestion_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("github_suggestions.id", ondelete="CASCADE"), unique=True, index=True
     )
     skill_slug: Mapped[str] = mapped_column(ForeignKey("canonical_skills.slug"), index=True)
     evidence_level: Mapped[int] = mapped_column(Integer)
@@ -201,3 +209,37 @@ class CandidateSkillEvidence(Base):
     locator: Mapped[str] = mapped_column(String(80))
     source_type: Mapped[str] = mapped_column(String(30), default="cv")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GithubProject(Base):
+    __tablename__ = "github_projects"
+    __table_args__ = (UniqueConstraint("user_id", "canonical_url"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    canonical_url: Mapped[str] = mapped_column(Text)
+    owner: Mapped[str] = mapped_column(String(100))
+    repository: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text)
+    default_branch: Mapped[str | None] = mapped_column(String(120))
+    stars: Mapped[int] = mapped_column(Integer, default=0)
+    language: Mapped[str | None] = mapped_column(String(80))
+    topics: Mapped[str] = mapped_column(Text, default="[]")
+    readme_excerpt: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="awaiting_review", index=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GithubSuggestion(Base):
+    __tablename__ = "github_suggestions"
+    __table_args__ = (UniqueConstraint("project_id", "canonical_skill"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("github_projects.id", ondelete="CASCADE"), index=True)
+    canonical_skill: Mapped[str] = mapped_column(String(100), index=True)
+    category: Mapped[str] = mapped_column(String(60))
+    excerpt: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float)
+    proposed_level: Mapped[int] = mapped_column(Integer)
+    review_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
