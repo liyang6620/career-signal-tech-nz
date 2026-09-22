@@ -212,6 +212,17 @@ select {
 .path-grid button { margin-top:18px; border:0; background:transparent; color:#1f6348; font-size:14px; font-weight:700; cursor:pointer; }
 .route-list { grid-template-columns:repeat(3,1fr); }
 .route-list .primary-button { margin-top:18px; }
+.radar-layout { display:grid; grid-template-columns:minmax(420px,1fr) minmax(220px,.6fr); gap:24px; align-items:center; padding:24px 10px; }
+.capability-radar { width:100%; max-height:500px; }
+.radar-grid, .radar-ring { fill:none; stroke:#dfe6e2; stroke-width:1; }
+.radar-axis { stroke:#dfe6e2; stroke-width:1; }
+.radar-fill { fill:rgba(73,174,223,.42); stroke:#34acd9; stroke-width:2; }
+.radar-dot { fill:#35aeda; stroke:#fff; stroke-width:2; }
+.radar-label { fill:#45535c; font-size:11px; }
+.radar-values { display:grid; gap:9px; }
+.radar-values div { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid #edf0ef; }
+.radar-values span { color:#56636b; font-size:14px; }
+.radar-values b { min-width:38px; padding:4px 8px; border-radius:4px; background:#f6bd43; color:#fff; text-align:center; font-size:14px; }
 .evidence-network { position:relative; min-height:560px; overflow:hidden; background:radial-gradient(circle at center, #f3f8f5 0 112px, transparent 113px), linear-gradient(#fff,#fbfdfc); }
 .evidence-network::before, .evidence-network::after { content:""; position:absolute; left:50%; top:50%; border:1px solid #d5e5dc; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
 .evidence-network::before { width:270px; height:270px; }
@@ -237,6 +248,7 @@ select {
 .network-skill.missing { border-color:#e1c7b4; background:#fffaf6; }
 @media (max-width:700px) { .path-grid, .route-list { grid-template-columns:1fr; } }
 @media (max-width:700px) { .evidence-network { min-height:620px; } .network-role { width:125px; min-height:85px; } .network-skill { width:145px; } .network-skill::after { display:none; } .network-skill:nth-child(2), .network-skill:nth-child(6) { left:50%; } .network-skill:nth-child(3), .network-skill:nth-child(5) { left:82%; } .network-skill:nth-child(7), .network-skill:nth-child(9) { left:18%; } }
+@media (max-width:700px) { .radar-layout { grid-template-columns:1fr; padding:12px 0; } .radar-label { font-size:9px; } }
 .product-shell .topbar, .product-shell .quiet-button, .product-shell .stepper span, .product-shell .stepper i { font-size: 14px; }
 .product-shell .panel-title h2 { font-size: 21px; }
 .product-shell .setup-header h1 { font-size: 32px; }
