@@ -29,6 +29,9 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
 - Refresh sessions rotate on use and can be revoked at logout.
 - Career profiles, targets and evidence-source references are scoped through the authenticated user identifier.
 - Alembic owns application-schema changes. PostgreSQL initialization SQL owns pgvector and the analytical/RAG foundation.
+- Email verification and password reset use hashed, expiring, single-use tokens.
+- Registration, login failure, verification resend and reset-request limits persist in PostgreSQL audit events.
+- Account export and authenticated deletion provide the initial privacy self-service boundary.
 
 ## Scoring
 

@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     jwt_secret: str = "development-only-change-me-at-least-32-bytes"
     access_token_minutes: int = 15
     refresh_token_days: int = 30
+    frontend_url: str = "http://localhost:5173"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str = "noreply@careersignal.local"
+    smtp_use_tls: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -22,6 +29,8 @@ class Settings(BaseSettings):
     def validate_runtime(self) -> None:
         if self.environment == "production" and self.jwt_secret == "development-only-change-me-at-least-32-bytes":
             raise RuntimeError("JWT_SECRET must be explicitly configured in production")
+        if self.environment == "production" and not self.smtp_host:
+            raise RuntimeError("SMTP_HOST must be configured in production")
 
 
 @lru_cache

@@ -127,7 +127,7 @@ Planned ingestion uses public company career pages, permitted Greenhouse/Lever e
 
 ## Production-readiness status
 
-The repository currently provides a tested foundation rather than claiming production operation. Authentication, revocable sessions, user-scoped profile persistence and database migrations are implemented. Before public user data or live market claims, it still requires email verification and password reset, abuse controls, managed secrets, backups, object storage and malware scanning for CVs, privacy export/deletion workflows, monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
+The repository currently provides a tested foundation rather than claiming production operation. Authentication, email verification, password reset, persistent abuse controls, security audit events, revocable sessions, user-scoped profile persistence, account export/deletion and database migrations are implemented. Before public user data or live market claims, it still requires managed secrets, database backups and restore drills, S3-compatible object storage and malware scanning for CVs, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
 
 ## License
 

@@ -67,6 +67,7 @@ class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
     display_name: str
+    is_verified: bool
 
     model_config = {"from_attributes": True}
 
@@ -75,6 +76,22 @@ class AuthResponse(BaseModel):
     access_token: str
     expires_in: int
     user: UserResponse
+
+
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+
+class TokenRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+
+
+class ResetPasswordRequest(TokenRequest):
+    password: str = Field(min_length=12, max_length=128)
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
 
 
 class EvidenceSourceInput(BaseModel):

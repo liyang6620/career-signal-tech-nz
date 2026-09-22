@@ -1,27 +1,41 @@
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
+from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from .auth import create_access_token, current_user, hash_password, new_refresh_token, token_digest, verify_password
+from .auth import (
+    create_access_token,
+    current_user,
+    hash_password,
+    new_refresh_token,
+    token_digest,
+    verified_user,
+    verify_password,
+)
 from .config import get_settings
 from .database import get_db
-from .models import CareerProfile, CareerTarget, EvidenceSource, RefreshSession, User
+from .mailer import send_email
+from .models import CareerProfile, CareerTarget, EvidenceSource, OneTimeToken, RefreshSession, User
 from .schemas import (
     AuthResponse,
+    DeleteAccountRequest,
     DimensionScoreRequest,
     DimensionScoreResponse,
+    EmailRequest,
     LoginRequest,
     ProfileResponse,
     ProfileSetupRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     RoleFamily,
+    TokenRequest,
     UserResponse,
 )
 from .scoring import calculate_dimension_score
+from .security_events import actor_fingerprint, audit, enforce_event_limit, enforce_login_limit
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
@@ -32,6 +46,31 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+
+def create_one_time_token(db: Session, user: User, purpose: str, lifetime: timedelta) -> str:
+    raw_token = new_refresh_token()
+    db.add(
+        OneTimeToken(
+            user_id=user.id,
+            purpose=purpose,
+            token_hash=token_digest(raw_token),
+            expires_at=datetime.now(UTC) + lifetime,
+        )
+    )
+    return raw_token
+
+
+def verification_message(token: str) -> str:
+    return (
+        f"Verify your CareerSignal email:\n\n{settings.frontend_url}/?verify={token}\n\nThis link expires in 24 hours."
+    )
+
+
+def reset_message(token: str) -> str:
+    return (
+        f"Reset your CareerSignal password:\n\n{settings.frontend_url}/?reset={token}\n\nThis link expires in 1 hour."
+    )
 
 
 def issue_session(response: Response, user: User, db: Session) -> AuthResponse:
@@ -53,22 +92,44 @@ def issue_session(response: Response, user: User, db: Session) -> AuthResponse:
 
 
 @app.post("/api/v1/auth/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, response: Response, db: Annotated[Session, Depends(get_db)]) -> AuthResponse:
+def register(
+    payload: RegisterRequest,
+    request: Request,
+    response: Response,
+    background: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthResponse:
     email = payload.email.lower()
+    fingerprint = actor_fingerprint(request)
+    enforce_event_limit(db, "auth.registered", fingerprint, 5, 15)
     if db.scalar(select(User.id).where(User.email == email)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
     user = User(email=email, password_hash=hash_password(payload.password), display_name=payload.display_name.strip())
     db.add(user)
     db.commit()
     db.refresh(user)
-    return issue_session(response, user, db)
+    token = create_one_time_token(db, user, "verify_email", timedelta(hours=24))
+    audit(db, "auth.registered", user_id=user.id, fingerprint=fingerprint)
+    result = issue_session(response, user, db)
+    background.add_task(send_email, user.email, "Verify your CareerSignal email", verification_message(token))
+    return result
 
 
 @app.post("/api/v1/auth/login", response_model=AuthResponse)
-def login(payload: LoginRequest, response: Response, db: Annotated[Session, Depends(get_db)]) -> AuthResponse:
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+) -> AuthResponse:
+    fingerprint = actor_fingerprint(request, payload.email)
+    enforce_login_limit(db, fingerprint)
     user = db.scalar(select(User).where(User.email == payload.email.lower(), User.is_active.is_(True)))
     if user is None or not verify_password(payload.password, user.password_hash):
+        audit(db, "auth.login_failed", fingerprint=fingerprint)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    audit(db, "auth.login_succeeded", user_id=user.id, fingerprint=fingerprint)
     return issue_session(response, user, db)
 
 
@@ -115,6 +176,101 @@ def me(user: Annotated[User, Depends(current_user)]) -> User:
     return user
 
 
+@app.post("/api/v1/auth/verify-email", status_code=status.HTTP_204_NO_CONTENT)
+def verify_email(payload: TokenRequest, db: Annotated[Session, Depends(get_db)]) -> None:
+    token = db.scalar(
+        select(OneTimeToken).where(
+            OneTimeToken.token_hash == token_digest(payload.token),
+            OneTimeToken.purpose == "verify_email",
+            OneTimeToken.used_at.is_(None),
+            OneTimeToken.expires_at > datetime.now(UTC),
+        )
+    )
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification link is invalid or expired")
+    user = db.get(User, token.user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification link is invalid")
+    user.is_verified = True
+    token.used_at = datetime.now(UTC)
+    audit(db, "auth.email_verified", user_id=user.id)
+    db.commit()
+
+
+@app.post("/api/v1/auth/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+def resend_verification(
+    background: BackgroundTasks,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, str]:
+    if user.is_verified:
+        return {"status": "already_verified"}
+    fingerprint = actor_fingerprint(request, user.email)
+    enforce_event_limit(db, "auth.verification_resent", fingerprint, 3, 15)
+    db.execute(
+        delete(OneTimeToken).where(
+            OneTimeToken.user_id == user.id,
+            OneTimeToken.purpose == "verify_email",
+            OneTimeToken.used_at.is_(None),
+        )
+    )
+    token = create_one_time_token(db, user, "verify_email", timedelta(hours=24))
+    audit(db, "auth.verification_resent", user_id=user.id, fingerprint=fingerprint)
+    db.commit()
+    background.add_task(send_email, user.email, "Verify your CareerSignal email", verification_message(token))
+    return {"status": "sent"}
+
+
+@app.post("/api/v1/auth/forgot-password", status_code=status.HTTP_202_ACCEPTED)
+def forgot_password(
+    payload: EmailRequest,
+    background: BackgroundTasks,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, str]:
+    fingerprint = actor_fingerprint(request, payload.email)
+    enforce_event_limit(db, "auth.password_reset_requested", fingerprint, 3, 15)
+    user = db.scalar(select(User).where(User.email == payload.email.lower(), User.is_active.is_(True)))
+    if user:
+        db.execute(
+            delete(OneTimeToken).where(
+                OneTimeToken.user_id == user.id,
+                OneTimeToken.purpose == "reset_password",
+                OneTimeToken.used_at.is_(None),
+            )
+        )
+        token = create_one_time_token(db, user, "reset_password", timedelta(hours=1))
+        audit(db, "auth.password_reset_requested", user_id=user.id, fingerprint=fingerprint)
+        background.add_task(send_email, user.email, "Reset your CareerSignal password", reset_message(token))
+    else:
+        audit(db, "auth.password_reset_requested", fingerprint=fingerprint)
+    db.commit()
+    return {"status": "accepted"}
+
+
+@app.post("/api/v1/auth/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(payload: ResetPasswordRequest, db: Annotated[Session, Depends(get_db)]) -> None:
+    token = db.scalar(
+        select(OneTimeToken).where(
+            OneTimeToken.token_hash == token_digest(payload.token),
+            OneTimeToken.purpose == "reset_password",
+            OneTimeToken.used_at.is_(None),
+            OneTimeToken.expires_at > datetime.now(UTC),
+        )
+    )
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset link is invalid or expired")
+    user = db.get(User, token.user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset link is invalid")
+    user.password_hash = hash_password(payload.password)
+    token.used_at = datetime.now(UTC)
+    db.execute(delete(RefreshSession).where(RefreshSession.user_id == user.id))
+    audit(db, "auth.password_reset_completed", user_id=user.id)
+    db.commit()
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "career-signal-api"}
@@ -151,7 +307,7 @@ def profile_response(profile: CareerProfile) -> ProfileResponse:
 @app.put("/api/v1/profile", response_model=ProfileResponse)
 def save_profile(
     payload: ProfileSetupRequest,
-    user: Annotated[User, Depends(current_user)],
+    user: Annotated[User, Depends(verified_user)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ProfileResponse:
     profile = db.scalar(
@@ -185,7 +341,7 @@ def save_profile(
 
 @app.get("/api/v1/profile", response_model=ProfileResponse)
 def get_profile(
-    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_db)]
+    user: Annotated[User, Depends(verified_user)], db: Annotated[Session, Depends(get_db)]
 ) -> ProfileResponse:
     profile = db.scalar(
         select(CareerProfile)
@@ -195,6 +351,38 @@ def get_profile(
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not created")
     return profile_response(profile)
+
+
+@app.get("/api/v1/account/export")
+def export_account(user: Annotated[User, Depends(verified_user)], db: Annotated[Session, Depends(get_db)]) -> dict:
+    profile = db.scalar(
+        select(CareerProfile)
+        .options(selectinload(CareerProfile.targets), selectinload(CareerProfile.evidence_sources))
+        .where(CareerProfile.user_id == user.id)
+    )
+    audit(db, "account.exported", user_id=user.id)
+    db.commit()
+    return {
+        "exported_at": datetime.now(UTC).isoformat(),
+        "account": {"id": str(user.id), "email": user.email, "display_name": user.display_name},
+        "profile": profile_response(profile).model_dump(mode="json") if profile else None,
+    }
+
+
+@app.delete("/api/v1/account", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    payload: DeleteAccountRequest,
+    response: Response,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    if not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Password is incorrect")
+    audit(db, "account.deleted", user_id=user.id)
+    db.flush()
+    db.delete(user)
+    db.commit()
+    response.delete_cookie("career_signal_refresh", path="/api/v1/auth")
 
 
 @app.post("/api/v1/scoring/dimension", response_model=DimensionScoreResponse)

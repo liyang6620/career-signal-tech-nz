@@ -36,21 +36,39 @@ const roles: Record<Exclude<RoleKey, "">, string> = {
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-type SessionUser = { id: string; email: string; display_name: string };
+type SessionUser = { id: string; email: string; display_name: string; is_verified: boolean };
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string, user: SessionUser) => void }) {
-  const [mode, setMode] = useState<"login" | "register">("register");
+  const resetToken = new URLSearchParams(window.location.search).get("reset");
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">(resetToken ? "reset" : "register");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError("");
+    setMessage("");
     try {
+      if (mode === "forgot") {
+        const response = await fetch(`${API_URL}/api/v1/auth/forgot-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+        if (!response.ok) throw new Error("Could not request a reset link");
+        setMessage("If that account exists, a reset link has been sent.");
+        return;
+      }
+      if (mode === "reset") {
+        const response = await fetch(`${API_URL}/api/v1/auth/reset-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: resetToken, password }) });
+        if (!response.ok) throw new Error("This reset link is invalid or expired");
+        window.history.replaceState({}, "", window.location.pathname);
+        setMode("login");
+        setMessage("Password updated. Sign in with your new password.");
+        setPassword("");
+        return;
+      }
       const response = await fetch(`${API_URL}/api/v1/auth/${mode}`, {
         method: "POST",
         credentials: "include",
@@ -67,7 +85,29 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string, user
     }
   }
 
-  return <div className="auth-page"><div className="auth-brand"><span>CS</span><strong>CareerSignal</strong></div><section className="auth-panel"><p className="auth-kicker">CareerSignal Tech NZ</p><h1>{mode === "register" ? "Create your career workspace" : "Welcome back"}</h1><p>{mode === "register" ? "Build an evidence-based profile for the New Zealand technology market." : "Sign in to continue your market and evidence analysis."}</p><form onSubmit={submit}>{mode === "register" && <label className="field"><span>Name</span><input required value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>}<label className="field"><span>Email</span><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label><label className="field"><span>Password</span><input required minLength={12} type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "register" ? "new-password" : "current-password"} /></label>{mode === "register" && <small>Use at least 12 characters.</small>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button auth-submit" disabled={submitting}>{submitting ? "Please wait..." : mode === "register" ? "Create account" : "Sign in"}<ArrowRight size={15} /></button></form><div className="auth-switch">{mode === "register" ? "Already have an account?" : "New to CareerSignal?"}<button onClick={() => { setMode(mode === "register" ? "login" : "register"); setError(""); }}>{mode === "register" ? "Sign in" : "Create account"}</button></div></section><p className="auth-note"><ShieldCheck size={14} />Your private evidence is never published as market data.</p></div>;
+  const title = mode === "register" ? "Create your career workspace" : mode === "login" ? "Welcome back" : mode === "forgot" ? "Reset your password" : "Choose a new password";
+  const description = mode === "register" ? "Build an evidence-based profile for the New Zealand technology market." : mode === "login" ? "Sign in to continue your market and evidence analysis." : mode === "forgot" ? "Enter your account email and we will send a reset link." : "Your new password must contain at least 12 characters.";
+  return <div className="auth-page"><div className="auth-brand"><span>CS</span><strong>CareerSignal</strong></div><section className="auth-panel"><p className="auth-kicker">CareerSignal Tech NZ</p><h1>{title}</h1><p>{description}</p><form onSubmit={submit}>{mode === "register" && <label className="field"><span>Name</span><input required value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>}{mode !== "reset" && <label className="field"><span>Email</span><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>}{mode !== "forgot" && <label className="field"><span>Password</span><input required minLength={mode === "login" ? 1 : 12} type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>}{(mode === "register" || mode === "reset") && <small>Use at least 12 characters.</small>}{mode === "login" && <button type="button" className="forgot-link" onClick={() => setMode("forgot")}>Forgot password?</button>}{message && <p className="success-message">{message}</p>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button auth-submit" disabled={submitting}>{submitting ? "Please wait..." : mode === "register" ? "Create account" : mode === "login" ? "Sign in" : mode === "forgot" ? "Send reset link" : "Update password"}<ArrowRight size={15} /></button></form><div className="auth-switch">{mode === "register" ? "Already have an account?" : mode === "login" ? "New to CareerSignal?" : "Return to sign in"}<button onClick={() => { setMode(mode === "register" ? "login" : mode === "login" ? "register" : "login"); setError(""); setMessage(""); }}>{mode === "register" ? "Sign in" : mode === "login" ? "Create account" : "Sign in"}</button></div></section><p className="auth-note"><ShieldCheck size={14} />Your private evidence is never published as market data.</p></div>;
+}
+
+function VerifyEmailScreen({ token, user, onVerified, onSignOut }: { token: string; user: SessionUser; onVerified: () => void; onSignOut: () => void }) {
+  const verificationToken = new URLSearchParams(window.location.search).get("verify");
+  const [status, setStatus] = useState<"waiting" | "verifying" | "sent" | "error">(verificationToken ? "verifying" : "waiting");
+
+  useEffect(() => {
+    if (!verificationToken) return;
+    fetch(`${API_URL}/api/v1/auth/verify-email`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: verificationToken }) })
+      .then((response) => { if (!response.ok) throw new Error(); window.history.replaceState({}, "", window.location.pathname); onVerified(); })
+      .catch(() => setStatus("error"));
+  }, [verificationToken, onVerified]);
+
+  async function resend() {
+    setStatus("verifying");
+    const response = await fetch(`${API_URL}/api/v1/auth/resend-verification`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    setStatus(response.ok ? "sent" : "error");
+  }
+
+  return <div className="auth-page"><div className="auth-brand"><span>CS</span><strong>CareerSignal</strong></div><section className="auth-panel verify-panel"><span className="verify-icon"><ShieldCheck size={22} /></span><p className="auth-kicker">Secure your account</p><h1>{status === "verifying" ? "Verifying your email..." : "Check your email"}</h1><p>We sent a verification link to <strong>{user.email}</strong>. Verify the address before creating a career profile.</p>{status === "sent" && <p className="success-message">A new link has been sent.</p>}{status === "error" && <p className="form-error">The link is invalid or expired. Request a new one.</p>}<button className="primary-button auth-submit" onClick={resend} disabled={status === "verifying"}>Resend verification email</button><button className="text-button verify-signout" onClick={onSignOut}>Sign out</button></section><p className="auth-note"><ShieldCheck size={14} />Verification links expire after 24 hours.</p></div>;
 }
 
 export default function App() {
@@ -114,6 +154,7 @@ export default function App() {
 
   if (checkingSession) return <div className="session-loading"><span>CS</span><div><i /><i /><i /></div></div>;
   if (!token || !user) return <AuthScreen onAuthenticated={(accessToken, sessionUser) => { setToken(accessToken); setUser(sessionUser); }} />;
+  if (!user.is_verified) return <VerifyEmailScreen token={token} user={user} onVerified={() => setUser({ ...user, is_verified: true })} onSignOut={logout} />;
 
   function continueFromTarget() {
     if (!role) {
