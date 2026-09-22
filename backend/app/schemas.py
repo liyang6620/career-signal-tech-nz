@@ -1,6 +1,8 @@
+from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, model_validator
 
 
 class EvidenceItem(BaseModel):
@@ -48,3 +50,58 @@ class RoleFamily(BaseModel):
     id: str
     label: str
     status: Literal["active", "planned"]
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+    display_name: str = Field(min_length=1, max_length=120)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
+class UserResponse(BaseModel):
+    id: UUID
+    email: EmailStr
+    display_name: str
+
+    model_config = {"from_attributes": True}
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    expires_in: int
+    user: UserResponse
+
+
+class EvidenceSourceInput(BaseModel):
+    source_type: Literal["github", "portfolio"]
+    source_reference: HttpUrl
+
+
+class ProfileSetupRequest(BaseModel):
+    role_family: Literal["software", "data-analyst", "data-engineer", "ai", "cloud-devops"]
+    location: str = Field(min_length=1, max_length=120)
+    seniority: Literal["Graduate / Junior", "Intermediate", "Senior", "Lead / Manager"]
+    evidence_sources: list[EvidenceSourceInput] = Field(default_factory=list, max_length=10)
+
+
+class EvidenceSourceResponse(BaseModel):
+    id: UUID
+    source_type: str
+    source_reference: str
+    processing_status: str
+
+    model_config = {"from_attributes": True}
+
+
+class ProfileResponse(BaseModel):
+    id: UUID
+    location: str
+    seniority: str
+    role_family: str
+    evidence_sources: list[EvidenceSourceResponse]
+    updated_at: datetime

@@ -22,7 +22,8 @@ def calculate_dimension_score(request: DimensionScoreRequest) -> ScoreResult:
     weighted_depth = 0.0
     for item in request.evidence:
         normalized = (
-            item.evidence_level / 5
+            item.evidence_level
+            / 5
             * item.quality_factor
             * item.recency_factor
             * item.verification_factor

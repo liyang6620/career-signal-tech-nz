@@ -21,6 +21,15 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
 - Every recommendation must cite market observations and candidate evidence.
 - Candidate documents are private by default and deletable by the owner.
 
+## Identity and persistence
+
+- Passwords are hashed with Argon2 and never stored or logged in plaintext.
+- Access JWTs are short-lived and held by the frontend in memory.
+- Opaque refresh tokens are sent in HttpOnly cookies; only their SHA-256 hashes are persisted.
+- Refresh sessions rotate on use and can be revoked at logout.
+- Career profiles, targets and evidence-source references are scoped through the authenticated user identifier.
+- Alembic owns application-schema changes. PostgreSQL initialization SQL owns pgvector and the analytical/RAG foundation.
+
 ## Scoring
 
 Each assessment is bound to target role, location, seniority, and market window. A skill contribution is:

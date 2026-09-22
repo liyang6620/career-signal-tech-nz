@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -12,6 +12,7 @@ import {
   GitBranch,
   LayoutDashboard,
   Link2,
+  LogOut,
   MapPin,
   Plus,
   Settings,
@@ -34,7 +35,45 @@ const roles: Record<Exclude<RoleKey, "">, string> = {
   cloud: "Cloud / DevOps Engineer",
 };
 
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+type SessionUser = { id: string; email: string; display_name: string };
+
+function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string, user: SessionUser) => void }) {
+  const [mode, setMode] = useState<"login" | "register">("register");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_URL}/api/v1/auth/${mode}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mode === "register" ? { display_name: name, email, password } : { email, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail ?? "Authentication failed");
+      onAuthenticated(data.access_token, data.user);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Authentication failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return <div className="auth-page"><div className="auth-brand"><span>CS</span><strong>CareerSignal</strong></div><section className="auth-panel"><p className="auth-kicker">CareerSignal Tech NZ</p><h1>{mode === "register" ? "Create your career workspace" : "Welcome back"}</h1><p>{mode === "register" ? "Build an evidence-based profile for the New Zealand technology market." : "Sign in to continue your market and evidence analysis."}</p><form onSubmit={submit}>{mode === "register" && <label className="field"><span>Name</span><input required value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>}<label className="field"><span>Email</span><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label><label className="field"><span>Password</span><input required minLength={12} type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "register" ? "new-password" : "current-password"} /></label>{mode === "register" && <small>Use at least 12 characters.</small>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button auth-submit" disabled={submitting}>{submitting ? "Please wait..." : mode === "register" ? "Create account" : "Sign in"}<ArrowRight size={15} /></button></form><div className="auth-switch">{mode === "register" ? "Already have an account?" : "New to CareerSignal?"}<button onClick={() => { setMode(mode === "register" ? "login" : "register"); setError(""); }}>{mode === "register" ? "Sign in" : "Create account"}</button></div></section><p className="auth-note"><ShieldCheck size={14} />Your private evidence is never published as market data.</p></div>;
+}
+
 export default function App() {
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [step, setStep] = useState<Step>(1);
   const [role, setRole] = useState<RoleKey>("");
   const [location, setLocation] = useState("Auckland");
@@ -43,6 +82,38 @@ export default function App() {
   const [github, setGithub] = useState("");
   const [portfolio, setPortfolio] = useState("");
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
+      .then(async (response) => response.ok ? response.json() : Promise.reject())
+      .then((data) => { setToken(data.access_token); setUser(data.user); })
+      .catch(() => undefined)
+      .finally(() => setCheckingSession(false));
+  }, []);
+
+  async function saveProfile() {
+    if (!token || !role) return;
+    setError("");
+    const evidence_sources = [
+      ...(github.trim() ? [{ source_type: "github", source_reference: github.startsWith("http") ? github : `https://${github}` }] : []),
+      ...(portfolio.trim() ? [{ source_type: "portfolio", source_reference: portfolio.startsWith("http") ? portfolio : `https://${portfolio}` }] : []),
+    ];
+    const response = await fetch(`${API_URL}/api/v1/profile`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ role_family: role, location, seniority, evidence_sources }) });
+    const data = await response.json();
+    if (!response.ok) { setError(data.detail ?? "Could not save profile"); return; }
+    setSaved(true);
+  }
+
+  async function logout() {
+    await fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" });
+    setToken(null);
+    setUser(null);
+    setStep(1);
+  }
+
+  if (checkingSession) return <div className="session-loading"><span>CS</span><div><i /><i /><i /></div></div>;
+  if (!token || !user) return <AuthScreen onAuthenticated={(accessToken, sessionUser) => { setToken(accessToken); setUser(sessionUser); }} />;
 
   function continueFromTarget() {
     if (!role) {
@@ -74,7 +145,7 @@ export default function App() {
           <a><FileText size={17} />Evidence graph</a>
           <a><BookOpen size={17} />SkillRoute</a>
         </nav>
-        <div className="sidebar-bottom"><a><CircleHelp size={17} />Help</a><a><Settings size={17} />Settings</a><div className="account"><UserRound size={18} /><span>New profile</span></div></div>
+        <div className="sidebar-bottom"><a><CircleHelp size={17} />Help</a><a><Settings size={17} />Settings</a><div className="account"><UserRound size={18} /><span>{user.display_name}</span><button onClick={logout} aria-label="Sign out" title="Sign out"><LogOut size={15} /></button></div></div>
       </aside>
 
       <main>
@@ -112,7 +183,7 @@ export default function App() {
             {step === 2 && <>
               <div className="panel-title"><span className="panel-icon"><FileText size={20} /></span><div><h2>Add evidence of your work</h2><p>Use one or more sources. You will review extracted evidence before it affects your profile.</p></div></div>
               <div className="source-list">
-                <div className={`source-row ${cv ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cv ? cv.name : "PDF or DOCX, up to 10 MB"}</p></div>{cv ? <button className="icon-action" aria-label="Remove CV" onClick={() => setCv(null)}><X size={17} /></button> : <label className="upload-button"><UploadCloud size={15} />Choose file<input type="file" accept=".pdf,.doc,.docx" onChange={(event) => setCv(event.target.files?.[0] ?? null)} /></label>}</div>
+                <div className={`source-row ${cv ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cv ? cv.name : "Object storage connection pending"}</p></div>{cv ? <button className="icon-action" aria-label="Remove CV" onClick={() => setCv(null)}><X size={17} /></button> : <span className="pending-upload"><UploadCloud size={15} />Coming next</span>}</div>
                 <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub profile</strong><p>Public repositories only</p></div><div className="url-control"><Link2 size={15} /><input placeholder="github.com/username" value={github} onChange={(event) => setGithub(event.target.value)} /></div></label>
                 <label className="source-row"><span className="source-icon"><Link2 size={19} /></span><div><strong>Portfolio or project</strong><p>Optional public URL</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://" value={portfolio} onChange={(event) => setPortfolio(event.target.value)} /></div></label>
                 <button className="manual-source"><Plus size={16} />Add evidence manually</button>
@@ -129,7 +200,7 @@ export default function App() {
                 {portfolio && <div><dt>Portfolio</dt><dd><strong>{portfolio}</strong><span>Public page</span></dd><button onClick={() => setStep(2)}>Edit</button></div>}
               </dl>
               <div className="consent"><label><input type="checkbox" defaultChecked /><span>I understand that generated findings must be reviewed before I use them in an application.</span></label></div>
-              <div className="not-live"><strong>Current implementation status</strong><p>The scoring API is available, but CV and GitHub extraction are not connected yet. Creating the profile will be enabled when ingestion and evidence-review endpoints are complete.</p></div>
+              <div className="not-live"><strong>Current implementation status</strong><p>Your account, target and public evidence-source references will be persisted. CV object storage and evidence extraction are the next production milestone.</p></div>
             </>}
 
             {error && <p className="form-error" role="alert">{error}</p>}
@@ -137,7 +208,7 @@ export default function App() {
               {step > 1 ? <button className="secondary-button" onClick={() => { setError(""); setStep((step - 1) as Step); }}><ArrowLeft size={15} />Back</button> : <span />}
               {step === 1 && <button className="primary-button" onClick={continueFromTarget}>Continue <ArrowRight size={15} /></button>}
               {step === 2 && <div className="action-group"><button className="text-button" onClick={() => { setError(""); setStep(3); }}>Skip for now</button><button className="primary-button" onClick={continueFromEvidence}>Review evidence <ArrowRight size={15} /></button></div>}
-              {step === 3 && <button className="primary-button" disabled title="Evidence ingestion is not implemented">Create evidence profile <ArrowRight size={15} /></button>}
+              {step === 3 && <button className="primary-button" onClick={saveProfile}>{saved ? <><Check size={15} />Profile saved</> : <>Create evidence profile <ArrowRight size={15} /></>}</button>}
             </footer>
           </section>
         </div>

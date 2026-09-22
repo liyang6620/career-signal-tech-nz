@@ -59,6 +59,7 @@ Missing required skills cap a dimension score. The API returns all contributions
 
 - Frontend: React 19, TypeScript, Vite, ECharts, React Flow
 - API: Python 3.12, FastAPI, Pydantic
+- Persistence/auth: SQLAlchemy, Alembic, Argon2, short-lived JWT access tokens and rotated refresh sessions
 - Data/RAG: PostgreSQL 16 + pgvector; local embeddings by default
 - Analytics/ingestion (planned): DuckDB, Parquet, Python collectors and APScheduler
 - AI: optional OpenAI Responses API with Structured Outputs and cited context
@@ -92,6 +93,13 @@ Or start PostgreSQL with pgvector and the API:
 docker compose up --build
 ```
 
+Generate a strong `JWT_SECRET` in `.env` before running any shared or deployed environment. The API container applies Alembic migrations before startup. For local API development, apply them explicitly:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
 API documentation is available at `http://localhost:8000/docs`; the Vite frontend defaults to `http://localhost:5173`.
 
 ## Quality checks
@@ -119,7 +127,7 @@ Planned ingestion uses public company career pages, permitted Greenhouse/Lever e
 
 ## Production-readiness status
 
-The repository currently provides a tested foundation rather than claiming production operation. Before public user data or live market claims, it still requires threat modelling, database migrations and backups, authentication/authorization, privacy controls, monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
+The repository currently provides a tested foundation rather than claiming production operation. Authentication, revocable sessions, user-scoped profile persistence and database migrations are implemented. Before public user data or live market claims, it still requires email verification and password reset, abuse controls, managed secrets, backups, object storage and malware scanning for CVs, privacy export/deletion workflows, monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
 
 ## License
 
