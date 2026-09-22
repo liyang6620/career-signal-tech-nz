@@ -47,6 +47,7 @@ from .models import (
     User,
 )
 from .rag import embed_query, index_job_postings, search_job_evidence
+from .rag_eval import evaluate_retrieval
 from .role_decoder import ROLE_LABELS, decode_role
 from .schemas import (
     AuthResponse,
@@ -72,6 +73,7 @@ from .schemas import (
     MarketSummaryResponse,
     ProfileResponse,
     ProfileSetupRequest,
+    RagEvaluationResponse,
     RagIndexRequest,
     RagIndexResponse,
     RegisterRequest,
@@ -666,6 +668,15 @@ def search_market_evidence(
         for index, row in enumerate(rows, start=1)
     ]
     return EvidenceSearchResponse(query=payload.query, result_count=len(citations), citations=citations)
+
+
+@app.post("/api/v1/rag/evaluate", response_model=RagEvaluationResponse)
+def evaluate_market_retrieval(
+    db: Annotated[Session, Depends(get_db)],
+    ingestion_key: Annotated[str | None, Header(alias="X-Ingestion-Key")] = None,
+) -> RagEvaluationResponse:
+    require_ingestion_key(ingestion_key)
+    return RagEvaluationResponse(**evaluate_retrieval(db))
 
 
 def profile_response(profile: CareerProfile) -> ProfileResponse:

@@ -386,3 +386,13 @@ class EvidenceSearchResponse(BaseModel):
     result_count: int
     citations: list[EvidenceCitation]
     retrieval_method: str = "filtered hybrid RRF: PostgreSQL FTS + pgvector cosine"
+
+
+class RagEvaluationResponse(BaseModel):
+    status: Literal["ok", "insufficient_data"]
+    case_count: int
+    evaluated_cases: int
+    k: int | None = None
+    recall_at_k: float | None
+    mean_reciprocal_rank: float | None
+    failures: list[dict[str, str]]

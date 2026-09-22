@@ -91,6 +91,8 @@ PostgreSQL is the system of record and pgvector supports semantic retrieval. Gov
 
 Retrieval filters first by role family, location, seniority and publication window. PostgreSQL English full-text search and pgvector cosine search each produce a ranked candidate list, then reciprocal-rank fusion combines them without model-generated relevance scores. Results expose the original posting URL, excerpt, publication date and deterministic citation label. OpenAI may later explain these retrieved citations with typed outputs, but is not part of indexing, retrieval or scoring.
 
+The protected evaluation endpoint runs a small versioned query set with explicit role-family and term expectations. It reports Recall@K and mean reciprocal rank only over the current indexed corpus, and returns `insufficient_data` when that corpus is empty. These metrics are regression signals for engineering changes; they are not market-quality claims and will later be complemented by reviewed human relevance labels.
+
 ## Production evolution
 
-The API now exposes the scoring contract, identity lifecycle, persisted career profiles, private document ingestion and user-reviewed CV evidence extraction. Next increments add the canonical skill taxonomy, confirmed-evidence scoring integration, GitHub extraction, compliant market ingestion, deduplication, retrieval evaluation, observability, backup policies and deployment manifests.
+The API now exposes the scoring contract, identity lifecycle, persisted career profiles, private document ingestion, user-reviewed CV evidence extraction, compliant market ingestion and citation-returning hybrid retrieval. Next increments add reviewed relevance labels, observability, backup policies and deployment manifests.

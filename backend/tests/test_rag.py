@@ -5,6 +5,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.models import JobChunk, JobPosting, MarketSource
 from app.rag import chunk_job_text, index_job_postings, vector_literal
+from app.rag_eval import evaluate_retrieval
 
 
 def test_chunking_is_bounded_and_overlapping() -> None:
@@ -56,4 +57,15 @@ def test_indexing_skips_unchanged_postings() -> None:
         assert first == {"indexed_postings": 1, "skipped_postings": 0, "created_chunks": 1}
         assert second == {"indexed_postings": 0, "skipped_postings": 1, "created_chunks": 0}
         assert db.scalar(select(func.count(JobChunk.id))) == 1
+    Base.metadata.drop_all(engine)
+
+
+def test_evaluation_is_explicit_when_corpus_is_empty() -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    testing_session = sessionmaker(bind=engine, expire_on_commit=False)
+    with testing_session() as db:
+        result = evaluate_retrieval(db)
+        assert result["status"] == "insufficient_data"
+        assert result["recall_at_k"] is None
     Base.metadata.drop_all(engine)
