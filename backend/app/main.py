@@ -711,6 +711,13 @@ def explain_market_evidence(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI explanation request failed") from exc
     answer = result.get("output_text")
     if not answer:
+        answer = "\n".join(
+            part.get("text", "")
+            for item in result.get("output", [])
+            for part in item.get("content", [])
+            if part.get("type") in {"output_text", "text"}
+        ).strip()
+    if not answer:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI explanation returned no text")
     return EvidenceExplainResponse(query=payload.query, answer=answer, citations=search.citations, model=result.get("model", "gpt-4o-mini"))
 

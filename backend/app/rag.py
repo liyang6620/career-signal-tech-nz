@@ -156,7 +156,7 @@ HYBRID_SEARCH = text(
         ) ranked
         GROUP BY id
     )
-    SELECT f.content, f.title, f.company, f.location, f.role_family, f.seniority,
+    SELECT f.id, f.content, f.title, f.company, f.location, f.role_family, f.seniority,
            f.source_url, f.published_at, fused.hybrid_score
     FROM fused
     JOIN filtered f ON f.id = fused.id

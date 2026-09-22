@@ -22,6 +22,7 @@ services:
       DATABASE_URL: postgresql+psycopg://career_signal:career_signal@database:5432/career_signal
       CORS_ORIGINS: http://localhost:5173
       JWT_SECRET: ${JWT_SECRET:-development-only-change-me-at-least-32-bytes}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       STORAGE_ENDPOINT: http://storage:9000
       STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-career-signal}
@@ -51,6 +52,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://career_signal:career_signal@database:5432/career_signal
       JWT_SECRET: ${JWT_SECRET:-development-only-change-me-at-least-32-bytes}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       STORAGE_ENDPOINT: http://storage:9000
       STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-career-signal}
