@@ -119,6 +119,8 @@ export default function App() {
   const [location, setLocation] = useState("Auckland");
   const [seniority, setSeniority] = useState("Graduate / Junior");
   const [cv, setCv] = useState<File | null>(null);
+  const [cvUploadId, setCvUploadId] = useState<string | null>(null);
+  const [cvStatus, setCvStatus] = useState<string>("");
   const [github, setGithub] = useState("");
   const [portfolio, setPortfolio] = useState("");
   const [error, setError] = useState("");
@@ -131,6 +133,48 @@ export default function App() {
       .catch(() => undefined)
       .finally(() => setCheckingSession(false));
   }, []);
+
+  useEffect(() => {
+    if (!token || !cvUploadId || !["queued_for_scan", "scanning"].includes(cvStatus)) return;
+    const timer = window.setInterval(async () => {
+      const response = await fetch(`${API_URL}/api/v1/evidence/uploads`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) return;
+      const uploads = await response.json();
+      const current = uploads.find((upload: { id: string }) => upload.id === cvUploadId);
+      if (current) setCvStatus(current.status);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [token, cvUploadId, cvStatus]);
+
+  async function uploadCv(file: File) {
+    if (!token) return;
+    setError("");
+    setCv(file);
+    setCvStatus("uploading");
+    const contentType = file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    try {
+      const initiated = await fetch(`${API_URL}/api/v1/evidence/uploads`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ filename: file.name, content_type: contentType, size: file.size }) });
+      const upload = await initiated.json();
+      if (!initiated.ok) throw new Error(upload.detail ?? "Could not prepare upload");
+      setCvUploadId(upload.id);
+      const stored = await fetch(upload.upload_url, { method: "PUT", headers: { "Content-Type": contentType, "x-amz-meta-expected-size": String(file.size) }, body: file });
+      if (!stored.ok) throw new Error("Object storage rejected the upload");
+      const completed = await fetch(`${API_URL}/api/v1/evidence/uploads/${upload.id}/complete`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const result = await completed.json();
+      if (!completed.ok) throw new Error(result.detail ?? "Could not complete upload");
+      setCvStatus(result.status);
+    } catch (caught) {
+      setCvStatus("failed");
+      setError(caught instanceof Error ? caught.message : "Upload failed");
+    }
+  }
+
+  async function removeCv() {
+    if (token && cvUploadId) await fetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    setCv(null);
+    setCvUploadId(null);
+    setCvStatus("");
+  }
 
   async function saveProfile() {
     if (!token || !role) return;
@@ -166,7 +210,11 @@ export default function App() {
   }
 
   function continueFromEvidence() {
-    if (!cv && !github.trim() && !portfolio.trim()) {
+    if (cvUploadId && ["uploading", "failed", "rejected", "scan_failed"].includes(cvStatus)) {
+      setError("Resolve the CV upload problem before continuing, or remove the file.");
+      return;
+    }
+    if (!cvUploadId && !github.trim() && !portfolio.trim()) {
       setError("Add at least one evidence source, or skip this step and add evidence manually later.");
       return;
     }
@@ -224,7 +272,7 @@ export default function App() {
             {step === 2 && <>
               <div className="panel-title"><span className="panel-icon"><FileText size={20} /></span><div><h2>Add evidence of your work</h2><p>Use one or more sources. You will review extracted evidence before it affects your profile.</p></div></div>
               <div className="source-list">
-                <div className={`source-row ${cv ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cv ? cv.name : "Object storage connection pending"}</p></div>{cv ? <button className="icon-action" aria-label="Remove CV" onClick={() => setCv(null)}><X size={17} /></button> : <span className="pending-upload"><UploadCloud size={15} />Coming next</span>}</div>
+                <div className={`source-row ${cv ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cv ? `${cv.name} · ${cvStatus.replaceAll("_", " ")}` : "PDF or DOCX, up to 10 MB"}</p></div>{cv ? <button className="icon-action" aria-label="Remove CV" onClick={removeCv}><X size={17} /></button> : <label className="upload-button"><UploadCloud size={15} />Choose file<input type="file" accept=".pdf,.docx" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCv(file); }} /></label>}</div>
                 <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub profile</strong><p>Public repositories only</p></div><div className="url-control"><Link2 size={15} /><input placeholder="github.com/username" value={github} onChange={(event) => setGithub(event.target.value)} /></div></label>
                 <label className="source-row"><span className="source-icon"><Link2 size={19} /></span><div><strong>Portfolio or project</strong><p>Optional public URL</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://" value={portfolio} onChange={(event) => setPortfolio(event.target.value)} /></div></label>
                 <button className="manual-source"><Plus size={16} />Add evidence manually</button>
@@ -236,12 +284,12 @@ export default function App() {
               <div className="panel-title"><span className="panel-icon"><ShieldCheck size={20} /></span><div><h2>Review your analysis scope</h2><p>Confirm what CareerSignal should compare. No score has been generated yet.</p></div></div>
               <dl className="review-list">
                 <div><dt>Target market</dt><dd><strong>{role ? roles[role] : "Not selected"}</strong><span>{location} · {seniority}</span></dd><button onClick={() => setStep(1)}>Edit</button></div>
-                <div><dt>CV</dt><dd><strong>{cv?.name ?? "Not added"}</strong><span>{cv ? "Ready for evidence extraction" : "You can add one later"}</span></dd><button onClick={() => setStep(2)}>Edit</button></div>
+                <div><dt>CV</dt><dd><strong>{cv?.name ?? "Not added"}</strong><span>{cv ? `Security status: ${cvStatus.replaceAll("_", " ")}` : "You can add one later"}</span></dd><button onClick={() => setStep(2)}>Edit</button></div>
                 <div><dt>GitHub</dt><dd><strong>{github || "Not added"}</strong><span>{github ? "Public repositories will be reviewed" : "You can connect it later"}</span></dd><button onClick={() => setStep(2)}>Edit</button></div>
                 {portfolio && <div><dt>Portfolio</dt><dd><strong>{portfolio}</strong><span>Public page</span></dd><button onClick={() => setStep(2)}>Edit</button></div>}
               </dl>
               <div className="consent"><label><input type="checkbox" defaultChecked /><span>I understand that generated findings must be reviewed before I use them in an application.</span></label></div>
-              <div className="not-live"><strong>Current implementation status</strong><p>Your account, target and public evidence-source references will be persisted. CV object storage and evidence extraction are the next production milestone.</p></div>
+              <div className="not-live"><strong>Evidence processing</strong><p>CVs are stored privately and must pass file-signature and malware checks before extraction. Evidence extraction begins only after a clean result.</p></div>
             </>}
 
             {error && <p className="form-error" role="alert">{error}</p>}

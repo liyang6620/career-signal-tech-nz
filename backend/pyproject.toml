@@ -8,6 +8,8 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16,<2",
+  "boto3>=1.40,<2",
+  "clamd>=1.0,<2",
   "fastapi>=0.117,<1",
   "email-validator>=2.2,<3",
   "pyjwt>=2.10,<3",

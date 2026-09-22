@@ -94,6 +94,35 @@ class DeleteAccountRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class UploadInitiateRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: Literal[
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]
+    size: int = Field(gt=0)
+
+
+class UploadInitiateResponse(BaseModel):
+    id: UUID
+    upload_url: str
+    storage_key: str
+    expires_in: int = 600
+
+
+class UploadResponse(BaseModel):
+    id: UUID
+    original_filename: str
+    content_type: str
+    expected_size: int
+    actual_size: int | None
+    status: str
+    failure_reason: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class EvidenceSourceInput(BaseModel):
     source_type: Literal["github", "portfolio"]
     source_reference: HttpUrl

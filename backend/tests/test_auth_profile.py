@@ -184,3 +184,61 @@ def test_account_export_and_deletion(client: TestClient) -> None:
         json={"email": "candidate@example.com", "password": "a-secure-password"},
     )
     assert login.status_code == 401
+
+
+def test_private_upload_is_validated_persisted_and_user_scoped(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.main.ensure_bucket", lambda: None)
+    monkeypatch.setattr("app.main.presigned_put", lambda key, content_type, size: "http://storage.test/signed")
+    monkeypatch.setattr(
+        "app.main.object_metadata",
+        lambda key: {
+            "ContentLength": 128,
+            "ContentType": "application/pdf",
+            "Metadata": {"expected-size": "128"},
+        },
+    )
+    deleted_keys: list[str] = []
+    monkeypatch.setattr("app.main.delete_object", deleted_keys.append)
+
+    first = register(client, "first@example.com")
+    headers = {"Authorization": f"Bearer {first['access_token']}"}
+    initiated = client.post(
+        "/api/v1/evidence/uploads",
+        headers=headers,
+        json={"filename": "candidate-cv.pdf", "content_type": "application/pdf", "size": 128},
+    )
+    assert initiated.status_code == 201
+    upload_id = initiated.json()["id"]
+    completed = client.post(f"/api/v1/evidence/uploads/{upload_id}/complete", headers=headers)
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "queued_for_scan"
+    assert len(client.get("/api/v1/evidence/uploads", headers=headers).json()) == 1
+
+    second = register(client, "second@example.com")
+    other_headers = {"Authorization": f"Bearer {second['access_token']}"}
+    assert client.post(f"/api/v1/evidence/uploads/{upload_id}/complete", headers=other_headers).status_code == 404
+    assert client.delete(f"/api/v1/evidence/uploads/{upload_id}", headers=other_headers).status_code == 404
+    assert client.delete(f"/api/v1/evidence/uploads/{upload_id}", headers=headers).status_code == 204
+    assert len(deleted_keys) == 1
+
+
+def test_upload_rejects_mismatched_extension_and_oversized_file(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.main.ensure_bucket", lambda: None)
+    auth = register(client)
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+    mismatch = client.post(
+        "/api/v1/evidence/uploads",
+        headers=headers,
+        json={"filename": "candidate.docx", "content_type": "application/pdf", "size": 128},
+    )
+    assert mismatch.status_code == 422
+    oversized = client.post(
+        "/api/v1/evidence/uploads",
+        headers=headers,
+        json={"filename": "candidate.pdf", "content_type": "application/pdf", "size": 20 * 1024 * 1024},
+    )
+    assert oversized.status_code == 413

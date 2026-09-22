@@ -33,6 +33,15 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
 - Registration, login failure, verification resend and reset-request limits persist in PostgreSQL audit events.
 - Account export and authenticated deletion provide the initial privacy self-service boundary.
 
+## Private document ingestion
+
+- The API issues a short-lived presigned PUT for a user-scoped object key; file bytes do not pass through the API process.
+- Completion verifies the stored size, content type and signed expected-size metadata before a job is accepted.
+- A durable PostgreSQL queue is claimed with `FOR UPDATE SKIP LOCKED`, allowing multiple workers without duplicate processing; expired processing leases are reclaimed after worker failure.
+- The worker validates PDF/DOCX signatures and streams each object through ClamAV. Rejected or infected objects are deleted.
+- Only objects in the `clean` state may enter future parsing, embedding and evidence-extraction stages.
+- Local development uses private MinIO storage. The same storage boundary supports managed S3-compatible services in deployment.
+
 ## Scoring
 
 Each assessment is bound to target role, location, seniority, and market window. A skill contribution is:
@@ -54,4 +63,4 @@ PostgreSQL is the system of record and pgvector supports semantic retrieval. Loc
 
 ## Production evolution
 
-The initial API exposes the scoring contract. Next increments add migrations, ingestion workers, deduplication, skill taxonomy versioning, document parsing, authentication, observability, evaluation datasets, rate limiting, backup policies, and deployment manifests.
+The API now exposes the scoring contract, identity lifecycle, persisted career profiles and private document-ingestion boundary. Next increments add CV parsing, user-reviewed evidence extraction, compliant market ingestion, deduplication, skill-taxonomy versioning, retrieval evaluation, observability, backup policies and deployment manifests.

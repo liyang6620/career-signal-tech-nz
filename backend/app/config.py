@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from_email: str = "noreply@careersignal.local"
     smtp_use_tls: bool = True
+    storage_endpoint: str = "http://localhost:9000"
+    storage_public_endpoint: str = "http://localhost:9000"
+    storage_region: str = "us-east-1"
+    storage_bucket: str = "career-signal-private"
+    storage_access_key: str = "career-signal"
+    storage_secret_key: str = "development-storage-secret"
+    clamav_host: str = "localhost"
+    clamav_port: int = 3310
+    upload_max_bytes: int = 10 * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -31,6 +40,8 @@ class Settings(BaseSettings):
             raise RuntimeError("JWT_SECRET must be explicitly configured in production")
         if self.environment == "production" and not self.smtp_host:
             raise RuntimeError("SMTP_HOST must be configured in production")
+        if self.environment == "production" and self.storage_secret_key == "development-storage-secret":
+            raise RuntimeError("STORAGE_SECRET_KEY must be explicitly configured in production")
 
 
 @lru_cache

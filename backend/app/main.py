@@ -1,5 +1,7 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Annotated
+from uuid import UUID, uuid4
 
 from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +20,16 @@ from .auth import (
 from .config import get_settings
 from .database import get_db
 from .mailer import send_email
-from .models import CareerProfile, CareerTarget, EvidenceSource, OneTimeToken, RefreshSession, User
+from .models import (
+    CareerProfile,
+    CareerTarget,
+    EvidenceSource,
+    EvidenceUpload,
+    OneTimeToken,
+    ProcessingJob,
+    RefreshSession,
+    User,
+)
 from .schemas import (
     AuthResponse,
     DeleteAccountRequest,
@@ -32,10 +43,14 @@ from .schemas import (
     ResetPasswordRequest,
     RoleFamily,
     TokenRequest,
+    UploadInitiateRequest,
+    UploadInitiateResponse,
+    UploadResponse,
     UserResponse,
 )
 from .scoring import calculate_dimension_score
 from .security_events import actor_fingerprint, audit, enforce_event_limit, enforce_login_limit
+from .storage import delete_object, ensure_bucket, object_metadata, presigned_put
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0")
@@ -43,7 +58,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -351,6 +366,104 @@ def get_profile(
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not created")
     return profile_response(profile)
+
+
+@app.post("/api/v1/evidence/uploads", response_model=UploadInitiateResponse, status_code=status.HTTP_201_CREATED)
+def initiate_upload(
+    payload: UploadInitiateRequest,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> UploadInitiateResponse:
+    suffix = Path(payload.filename).suffix.lower()
+    expected_suffix = {
+        "application/pdf": ".pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    }[payload.content_type]
+    if suffix != expected_suffix:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Filename and content type disagree"
+        )
+    if payload.size > settings.upload_max_bytes:
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File exceeds upload limit")
+    ensure_bucket()
+    upload_id = uuid4()
+    storage_key = f"users/{user.id}/evidence/{upload_id}{expected_suffix}"
+    upload = EvidenceUpload(
+        id=upload_id,
+        user_id=user.id,
+        storage_key=storage_key,
+        original_filename=Path(payload.filename).name,
+        content_type=payload.content_type,
+        expected_size=payload.size,
+    )
+    db.add(upload)
+    audit(db, "evidence.upload_initiated", user_id=user.id, metadata={"upload_id": str(upload_id)})
+    db.commit()
+    return UploadInitiateResponse(
+        id=upload.id,
+        upload_url=presigned_put(upload.storage_key, upload.content_type, upload.expected_size),
+        storage_key=upload.storage_key,
+    )
+
+
+@app.post("/api/v1/evidence/uploads/{upload_id}/complete", response_model=UploadResponse)
+def complete_upload(
+    upload_id: UUID,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EvidenceUpload:
+    upload = db.scalar(select(EvidenceUpload).where(EvidenceUpload.id == upload_id, EvidenceUpload.user_id == user.id))
+    if upload is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload not found")
+    if upload.status != "pending_upload":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Upload has already been completed")
+    metadata = object_metadata(upload.storage_key)
+    actual_size = int(metadata["ContentLength"])
+    actual_type = metadata.get("ContentType", "")
+    expected_metadata = metadata.get("Metadata", {}).get("expected-size")
+    if (
+        actual_size != upload.expected_size
+        or actual_type != upload.content_type
+        or expected_metadata != str(upload.expected_size)
+    ):
+        delete_object(upload.storage_key)
+        upload.status = "rejected"
+        upload.failure_reason = "Uploaded object metadata did not match the signed request"
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=upload.failure_reason)
+    upload.actual_size = actual_size
+    upload.status = "queued_for_scan"
+    db.add(ProcessingJob(upload_id=upload.id, job_type="virus_scan"))
+    audit(db, "evidence.upload_completed", user_id=user.id, metadata={"upload_id": str(upload.id)})
+    db.commit()
+    db.refresh(upload)
+    return upload
+
+
+@app.get("/api/v1/evidence/uploads", response_model=list[UploadResponse])
+def list_uploads(
+    user: Annotated[User, Depends(verified_user)], db: Annotated[Session, Depends(get_db)]
+) -> list[EvidenceUpload]:
+    return list(
+        db.scalars(
+            select(EvidenceUpload).where(EvidenceUpload.user_id == user.id).order_by(EvidenceUpload.created_at.desc())
+        )
+    )
+
+
+@app.delete("/api/v1/evidence/uploads/{upload_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_upload(
+    upload_id: UUID,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    upload = db.scalar(select(EvidenceUpload).where(EvidenceUpload.id == upload_id, EvidenceUpload.user_id == user.id))
+    if upload is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload not found")
+    delete_object(upload.storage_key)
+    audit(db, "evidence.upload_deleted", user_id=user.id, metadata={"upload_id": str(upload.id)})
+    db.delete(upload)
+    db.commit()
 
 
 @app.get("/api/v1/account/export")
