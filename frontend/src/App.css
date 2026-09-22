@@ -193,6 +193,17 @@ select {
 .product-shell .source-row strong, .product-shell .review-list dt, .product-shell .review-list dd, .product-shell .evidence-item, .product-shell .not-live p { font-size: 14px; }
 .product-shell .source-row textarea { min-height: 72px; resize: vertical; border: 0; outline: 0; width: 100%; padding: 8px; color: #47515a; }
 .product-shell .evidence-item small, .product-shell .evidence-item q { font-size: 13px; }
+.product-shell .source-row { min-height: 92px; grid-template-columns: 48px minmax(190px, 1fr) minmax(280px, 1.2fr); }
+.product-shell .source-row .url-control { height: auto; min-height: 58px; align-self: stretch; padding: 0 10px; }
+.product-shell .source-row .url-control textarea { display: block; min-height: 56px; height: 100%; line-height: 1.45; font-size: 14px; }
+.product-shell .source-row .url-control textarea::placeholder { color: #7f8992; opacity: 1; }
+.product-shell .sidebar nav button, .product-shell .sidebar nav a { font-size: 14px; }
+.product-shell .topbar, .product-shell .quiet-button, .product-shell .stepper span, .product-shell .stepper i { font-size: 14px; }
+.product-shell .panel-title h2 { font-size: 21px; }
+.product-shell .setup-header h1 { font-size: 32px; }
+.product-shell .primary-button, .product-shell .secondary-button, .product-shell .text-button, .product-shell .manual-source, .product-shell .upload-button { font-size: 14px; }
+.product-shell .field > span, .product-shell .input-control input, .product-shell .select-control select, .product-shell .url-control input { font-size: 14px; }
+@media (max-width: 700px) { .product-shell .source-row { grid-template-columns: 38px 1fr; } .product-shell .source-row .url-control { grid-column: 2; width: 100%; } .product-shell .setup-header h1 { font-size: 27px; } }
 .product-shell {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
