@@ -202,6 +202,17 @@ select {
 .product-shell .sidebar nav .nav-coming-soon:not(:disabled):hover { background:#f1f6f3; color:#1f6348; cursor:pointer; }
 .product-shell .nav-coming-soon:disabled { opacity:.75; cursor:not-allowed; }
 .product-shell .nav-coming-soon small { margin-left:auto; color:#9aa39d; font-size:10px; font-weight:500; }
+.path-grid, .route-list { display:grid; gap:14px; }
+.path-grid { grid-template-columns:repeat(2,1fr); }
+.path-grid article, .route-list article { padding:20px; border:1px solid #dfe4e1; background:#fff; }
+.path-grid article.path-current { border-color:#8ab3a1; background:#f3f8f5; }
+.path-grid article > span, .route-list article > b { color:#1f6348; font-size:11px; font-weight:700; letter-spacing:.04em; }
+.path-grid h2, .route-list h2 { margin:12px 0 8px; color:#283039; font-size:19px; }
+.path-grid p, .route-list p { margin:0; color:#68727c; font-size:14px; line-height:1.6; }
+.path-grid button { margin-top:18px; border:0; background:transparent; color:#1f6348; font-size:14px; font-weight:700; cursor:pointer; }
+.route-list { grid-template-columns:repeat(3,1fr); }
+.route-list .primary-button { margin-top:18px; }
+@media (max-width:700px) { .path-grid, .route-list { grid-template-columns:1fr; } }
 .product-shell .topbar, .product-shell .quiet-button, .product-shell .stepper span, .product-shell .stepper i { font-size: 14px; }
 .product-shell .panel-title h2 { font-size: 21px; }
 .product-shell .setup-header h1 { font-size: 32px; }
