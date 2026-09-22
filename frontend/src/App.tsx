@@ -1,185 +1,145 @@
-import { useMemo, useState } from "react";
-import ReactECharts from "echarts-for-react";
+import { useState } from "react";
 import {
-  Background,
-  Controls,
-  Handle,
-  MarkerType,
-  Position,
-  ReactFlow,
-  type Edge,
-  type Node,
-  type NodeProps,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-import {
+  ArrowLeft,
   ArrowRight,
   BarChart3,
   BookOpen,
   BriefcaseBusiness,
   Check,
-  CircleUserRound,
+  ChevronDown,
+  CircleHelp,
   FileText,
   GitBranch,
   LayoutDashboard,
+  Link2,
   MapPin,
-  MoreHorizontal,
-  Search,
+  Plus,
   Settings,
-  Sparkles,
+  ShieldCheck,
   Target,
+  UploadCloud,
+  UserRound,
+  X,
 } from "lucide-react";
 import "./App.css";
 
-type RoleKey = "software" | "data-analyst" | "data-engineer" | "ai";
+type Step = 1 | 2 | 3;
+type RoleKey = "" | "software" | "data-analyst" | "data-engineer" | "ai" | "cloud";
 
-const roles: Record<RoleKey, { label: string; count: number; scores: number[] }> = {
-  software: { label: "Software Engineer", count: 214, scores: [72, 54, 78, 66, 61, 74] },
-  "data-analyst": { label: "Data & BI Analyst", count: 128, scores: [68, 88, 61, 52, 86, 79] },
-  "data-engineer": { label: "Data Engineer", count: 94, scores: [74, 81, 71, 76, 69, 65] },
-  ai: { label: "AI Application Engineer", count: 67, scores: [76, 65, 74, 68, 78, 72] },
+const roles: Record<Exclude<RoleKey, "">, string> = {
+  software: "Software Engineer",
+  "data-analyst": "Data & BI Analyst",
+  "data-engineer": "Data Engineer / Analytics Engineer",
+  ai: "AI Application Engineer",
+  cloud: "Cloud / DevOps Engineer",
 };
 
-const dimensions = ["Programming", "Data", "Systems", "Delivery", "Analysis", "Product"];
-const skillRows = [
-  { skill: "SQL", demand: 82, level: "Strong evidence", score: 84, source: "NZ Migration Pipeline", tone: "strong" },
-  { skill: "Python", demand: 68, level: "Strong evidence", score: 81, source: "AI Data Workspace", tone: "strong" },
-  { skill: "Cloud platforms", demand: 49, level: "Strong evidence", score: 79, source: "AWS Pipeline", tone: "strong" },
-  { skill: "Data modelling", demand: 44, level: "Needs proof", score: 38, source: "CV mention only", tone: "partial" },
-  { skill: "Orchestration", demand: 36, level: "No evidence", score: 0, source: "Not found", tone: "missing" },
-];
-
-type SkillNodeData = { label: string; status: "strong" | "partial" | "gap" | "role"; detail: string };
-function SkillNode({ data }: NodeProps<Node<SkillNodeData>>) {
-  return (
-    <div className={`skill-node ${data.status}`} title={data.detail}>
-      <Handle type="target" position={Position.Left} />
-      <span>{data.label}</span>
-      <Handle type="source" position={Position.Right} />
-    </div>
-  );
-}
-const nodeTypes = { skill: SkillNode };
-const nodes: Node<SkillNodeData>[] = [
-  { id: "role", type: "skill", position: { x: 20, y: 165 }, data: { label: "Data Engineer", status: "role", detail: "Selected target role" } },
-  { id: "sql", type: "skill", position: { x: 235, y: 35 }, data: { label: "SQL", status: "strong", detail: "Verified in projects" } },
-  { id: "python", type: "skill", position: { x: 235, y: 125 }, data: { label: "Python", status: "strong", detail: "Verified in projects" } },
-  { id: "model", type: "skill", position: { x: 235, y: 215 }, data: { label: "Data modelling", status: "partial", detail: "Limited implementation proof" } },
-  { id: "orch", type: "skill", position: { x: 235, y: 305 }, data: { label: "Orchestration", status: "gap", detail: "No current evidence" } },
-  { id: "aws", type: "skill", position: { x: 465, y: 75 }, data: { label: "AWS pipeline", status: "strong", detail: "S3, Glue, Athena and EventBridge" } },
-  { id: "dbt", type: "skill", position: { x: 465, y: 205 }, data: { label: "dbt", status: "gap", detail: "Appears in 29% of sample roles" } },
-  { id: "testing", type: "skill", position: { x: 465, y: 295 }, data: { label: "Data testing", status: "partial", detail: "Automation evidence incomplete" } },
-];
-const edges: Edge[] = [["role", "sql"], ["role", "python"], ["role", "model"], ["role", "orch"], ["sql", "aws"], ["python", "aws"], ["model", "dbt"], ["orch", "testing"]].map(([source, target], index) => ({
-  id: `e-${index}`,
-  source,
-  target,
-  markerEnd: { type: MarkerType.ArrowClosed, color: "#9aa2a9" },
-  style: { stroke: "#9aa2a9", strokeWidth: 1.2 },
-}));
-
 export default function App() {
-  const [role, setRole] = useState<RoleKey>("data-engineer");
-  const [view, setView] = useState<"list" | "network">("list");
-  const selected = roles[role];
-  const overall = Math.round(selected.scores.reduce((sum, value) => sum + value, 0) / selected.scores.length);
-  const radarOption = useMemo(() => ({
-    animationDuration: 400,
-    tooltip: { trigger: "item" },
-    radar: {
-      radius: "58%",
-      center: ["50%", "51%"],
-      splitNumber: 4,
-      indicator: dimensions.map((name) => ({ name, max: 100 })),
-      axisName: { color: "#59616a", fontSize: 11 },
-      splitArea: { show: false },
-      splitLine: { lineStyle: { color: "#e2e5e9" } },
-      axisLine: { lineStyle: { color: "#e2e5e9" } },
-    },
-    series: [{ type: "radar", data: [
-      { value: selected.scores, name: "Your evidence", symbolSize: 4, lineStyle: { color: "#166534", width: 2 }, itemStyle: { color: "#166534" }, areaStyle: { color: "rgba(22,101,52,.12)" } },
-      { value: [82, 84, 78, 74, 72, 70], name: "Role benchmark", symbol: "none", lineStyle: { color: "#7b8490", width: 1.3, type: "dashed" }, areaStyle: { opacity: 0 } },
-    ] }],
-  }), [selected]);
+  const [step, setStep] = useState<Step>(1);
+  const [role, setRole] = useState<RoleKey>("");
+  const [location, setLocation] = useState("Auckland");
+  const [seniority, setSeniority] = useState("Graduate / Junior");
+  const [cv, setCv] = useState<File | null>(null);
+  const [github, setGithub] = useState("");
+  const [portfolio, setPortfolio] = useState("");
+  const [error, setError] = useState("");
+
+  function continueFromTarget() {
+    if (!role) {
+      setError("Choose a target role to continue.");
+      return;
+    }
+    setError("");
+    setStep(2);
+  }
+
+  function continueFromEvidence() {
+    if (!cv && !github.trim() && !portfolio.trim()) {
+      setError("Add at least one evidence source, or skip this step and add evidence manually later.");
+      return;
+    }
+    setError("");
+    setStep(3);
+  }
 
   return (
-    <div className="workspace">
+    <div className="product-shell">
       <aside className="sidebar">
-        <div className="logo"><span>CS</span><strong>CareerSignal</strong></div>
-        <nav aria-label="Main navigation">
-          <p>Workspace</p>
-          <a className="active"><LayoutDashboard size={17} />Overview</a>
-          <a><Target size={17} />Target roles</a>
-          <a><FileText size={17} />Evidence profile</a>
-          <a><BriefcaseBusiness size={17} />Job tracker</a>
-          <p>Career tools</p>
-          <a><GitBranch size={17} />Skill map</a>
-          <a><BookOpen size={17} />Development plan</a>
-          <a><BarChart3 size={17} />Market insights</a>
+        <div className="brand"><span>CS</span><strong>CareerSignal</strong></div>
+        <nav aria-label="Product navigation">
+          <a className="active"><LayoutDashboard size={17} />Workspace</a>
+          <a><BarChart3 size={17} />Market explorer</a>
+          <a><BriefcaseBusiness size={17} />Role decoder</a>
+          <a><Target size={17} />Career path map</a>
+          <a><FileText size={17} />Evidence graph</a>
+          <a><BookOpen size={17} />SkillRoute</a>
         </nav>
-        <div className="sidebar-footer"><a><Settings size={17} />Settings</a><div className="profile"><CircleUserRound size={28} /><span><strong>Yang Li</strong><small>Technology candidate</small></span><MoreHorizontal size={17} /></div></div>
+        <div className="sidebar-bottom"><a><CircleHelp size={17} />Help</a><a><Settings size={17} />Settings</a><div className="account"><UserRound size={18} /><span>New profile</span></div></div>
       </aside>
 
       <main>
-        <header className="app-header">
-          <div className="mobile-logo">CS</div>
-          <label className="global-search"><Search size={17} /><input aria-label="Search" placeholder="Search roles, skills and evidence" /></label>
-          <button className="plain-button">Import evidence</button>
-          <button className="primary-button"><Sparkles size={16} />Update profile</button>
+        <header className="topbar">
+          <div className="mobile-brand">CS</div>
+          <span>Profile setup</span>
+          <button className="quiet-button">Save and exit</button>
         </header>
 
-        <div className="page">
-          <div className="page-title"><div><p className="kicker">Career workspace</p><h1>Good afternoon, Yang</h1><p>Track how your real work supports the roles you want.</p></div><span className="data-note">Demo market data</span></div>
+        <div className="setup-page">
+          <header className="setup-header">
+            <p>Career profile</p>
+            <h1>Start your career workspace</h1>
+            <span>Choose a market context and add evidence. This profile connects to every CareerSignal module.</span>
+          </header>
 
-          <section className="target-strip">
-            <div className="target-copy"><span className="target-icon"><BriefcaseBusiness size={19} /></span><div><small>Primary target</small><select value={role} onChange={(event) => setRole(event.target.value as RoleKey)}>{Object.entries(roles).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></div></div>
-            <div className="context-item"><small>Location</small><strong><MapPin size={14} />Auckland</strong></div>
-            <div className="context-item"><small>Level</small><strong>Graduate / Junior</strong></div>
-            <div className="context-item"><small>Market sample</small><strong>{selected.count} roles</strong></div>
-            <button className="icon-button" aria-label="More target options"><MoreHorizontal size={18} /></button>
+          <ol className="stepper" aria-label="Profile setup progress">
+            {["Career target", "Evidence sources", "Review"].map((label, index) => {
+              const number = (index + 1) as Step;
+              return <li className={step === number ? "current" : step > number ? "complete" : ""} key={label}><i>{step > number ? <Check size={13} /> : number}</i><span>{label}</span></li>;
+            })}
+          </ol>
+
+          <section className="setup-panel">
+            {step === 1 && <>
+              <div className="panel-title"><span className="panel-icon"><Target size={20} /></span><div><h2>Which role family should we analyse first?</h2><p>CareerSignal classifies jobs from their responsibilities, not from the advertised title alone.</p></div></div>
+              <div className="form-grid">
+                <label className="field full"><span>Target role</span><div className="select-control"><select value={role} onChange={(event) => setRole(event.target.value as RoleKey)}><option value="">Select a role family</option>{Object.entries(roles).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select><ChevronDown size={16} /></div></label>
+                <label className="field"><span>Location</span><div className="input-control"><MapPin size={16} /><input value={location} onChange={(event) => setLocation(event.target.value)} /></div></label>
+                <label className="field"><span>Career level</span><div className="select-control"><select value={seniority} onChange={(event) => setSeniority(event.target.value)}><option>Graduate / Junior</option><option>Intermediate</option><option>Senior</option><option>Lead / Manager</option></select><ChevronDown size={16} /></div></label>
+              </div>
+              <div className="scope-note"><ShieldCheck size={18} /><div><strong>Scores are context-bound</strong><p>Changing the role, location or level creates a different assessment. CareerSignal does not produce a universal ability score.</p></div></div>
+            </>}
+
+            {step === 2 && <>
+              <div className="panel-title"><span className="panel-icon"><FileText size={20} /></span><div><h2>Add evidence of your work</h2><p>Use one or more sources. You will review extracted evidence before it affects your profile.</p></div></div>
+              <div className="source-list">
+                <div className={`source-row ${cv ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cv ? cv.name : "PDF or DOCX, up to 10 MB"}</p></div>{cv ? <button className="icon-action" aria-label="Remove CV" onClick={() => setCv(null)}><X size={17} /></button> : <label className="upload-button"><UploadCloud size={15} />Choose file<input type="file" accept=".pdf,.doc,.docx" onChange={(event) => setCv(event.target.files?.[0] ?? null)} /></label>}</div>
+                <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub profile</strong><p>Public repositories only</p></div><div className="url-control"><Link2 size={15} /><input placeholder="github.com/username" value={github} onChange={(event) => setGithub(event.target.value)} /></div></label>
+                <label className="source-row"><span className="source-icon"><Link2 size={19} /></span><div><strong>Portfolio or project</strong><p>Optional public URL</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://" value={portfolio} onChange={(event) => setPortfolio(event.target.value)} /></div></label>
+                <button className="manual-source"><Plus size={16} />Add evidence manually</button>
+              </div>
+              <p className="privacy-note"><ShieldCheck size={15} />Private documents remain attached to your profile and are not published.</p>
+            </>}
+
+            {step === 3 && <>
+              <div className="panel-title"><span className="panel-icon"><ShieldCheck size={20} /></span><div><h2>Review your analysis scope</h2><p>Confirm what CareerSignal should compare. No score has been generated yet.</p></div></div>
+              <dl className="review-list">
+                <div><dt>Target market</dt><dd><strong>{role ? roles[role] : "Not selected"}</strong><span>{location} · {seniority}</span></dd><button onClick={() => setStep(1)}>Edit</button></div>
+                <div><dt>CV</dt><dd><strong>{cv?.name ?? "Not added"}</strong><span>{cv ? "Ready for evidence extraction" : "You can add one later"}</span></dd><button onClick={() => setStep(2)}>Edit</button></div>
+                <div><dt>GitHub</dt><dd><strong>{github || "Not added"}</strong><span>{github ? "Public repositories will be reviewed" : "You can connect it later"}</span></dd><button onClick={() => setStep(2)}>Edit</button></div>
+                {portfolio && <div><dt>Portfolio</dt><dd><strong>{portfolio}</strong><span>Public page</span></dd><button onClick={() => setStep(2)}>Edit</button></div>}
+              </dl>
+              <div className="consent"><label><input type="checkbox" defaultChecked /><span>I understand that generated findings must be reviewed before I use them in an application.</span></label></div>
+              <div className="not-live"><strong>Current implementation status</strong><p>The scoring API is available, but CV and GitHub extraction are not connected yet. Creating the profile will be enabled when ingestion and evidence-review endpoints are complete.</p></div>
+            </>}
+
+            {error && <p className="form-error" role="alert">{error}</p>}
+            <footer className="panel-actions">
+              {step > 1 ? <button className="secondary-button" onClick={() => { setError(""); setStep((step - 1) as Step); }}><ArrowLeft size={15} />Back</button> : <span />}
+              {step === 1 && <button className="primary-button" onClick={continueFromTarget}>Continue <ArrowRight size={15} /></button>}
+              {step === 2 && <div className="action-group"><button className="text-button" onClick={() => { setError(""); setStep(3); }}>Skip for now</button><button className="primary-button" onClick={continueFromEvidence}>Review evidence <ArrowRight size={15} /></button></div>}
+              {step === 3 && <button className="primary-button" disabled title="Evidence ingestion is not implemented">Create evidence profile <ArrowRight size={15} /></button>}
+            </footer>
           </section>
-
-          <div className="content-grid">
-            <div className="main-column">
-              <section className="section profile-section">
-                <div className="section-header"><div><h2>Role readiness</h2><p>Based on evidence found in your CV and projects</p></div><button className="text-button">How scoring works</button></div>
-                <div className="readiness-grid">
-                  <div className="readiness-summary"><div className="score-ring"><strong>{overall}</strong><span>/100</span></div><h3>You have a credible foundation</h3><p>Your strongest evidence is in practical data pipelines. Two missing proof areas are holding back your match.</p><div className="legend"><span><i className="you" />Your evidence</span><span><i className="benchmark" />Role benchmark</span></div></div>
-                  <ReactECharts option={radarOption} className="radar" />
-                </div>
-              </section>
-
-              <section className="section skills-section">
-                <div className="section-header"><div><h2>Skills and evidence</h2><p>What employers ask for, and where you can prove it</p></div><div className="view-switch"><button className={view === "list" ? "selected" : ""} onClick={() => setView("list")}>List</button><button className={view === "network" ? "selected" : ""} onClick={() => setView("network")}>Map</button></div></div>
-                {view === "list" ? <div className="skill-list">
-                  <div className="skill-list-head"><span>Skill</span><span>Demand</span><span>Evidence</span><span>Best source</span></div>
-                  {skillRows.map((item) => <div className="skill-row" key={item.skill}><strong>{item.skill}</strong><span className="demand"><i style={{ width: `${item.demand}%` }} />{item.demand}%</span><span className={`evidence-state ${item.tone}`}>{item.tone === "strong" && <Check size={13} />}{item.level}</span><span>{item.source}</span></div>)}
-                </div> : <div className="network-canvas"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.35} maxZoom={1.4}><Background color="#e1e4e8" gap={24} size={1} /><Controls showInteractive={false} /></ReactFlow></div>}
-              </section>
-            </div>
-
-            <aside className="right-column">
-              <section className="next-step">
-                <p className="kicker">Recommended next step</p><h2>Make your pipeline production-ready</h2><p>Add a dbt transformation layer and automated data-quality checks to your migration project.</p>
-                <div className="impact"><span>Potential coverage</span><strong>73 <ArrowRight size={15} /> 84</strong></div>
-                <button className="primary-button wide">View 8-week plan <ArrowRight size={16} /></button>
-              </section>
-              <section className="priorities">
-                <div className="section-header"><div><h2>Priority gaps</h2><p>Ranked by market value</p></div></div>
-                <ol>
-                  <li><span>1</span><div><strong>dbt modelling</strong><p>Referenced in 29% of sampled roles</p></div></li>
-                  <li><span>2</span><div><strong>Automated data tests</strong><p>Strengthens existing pipeline evidence</p></div></li>
-                  <li><span>3</span><div><strong>Workflow orchestration</strong><p>No current implementation evidence</p></div></li>
-                </ol>
-              </section>
-              <section className="activity">
-                <div className="section-header"><div><h2>Evidence activity</h2></div><button className="text-button">View all</button></div>
-                <div><span className="activity-mark"><GitBranch size={15} /></span><p><strong>AWS Pipeline</strong> supports 4 target skills<small>Reviewed today</small></p></div>
-                <div><span className="activity-mark"><FileText size={15} /></span><p><strong>CV profile</strong> has 2 claims without proof<small>Reviewed 2 days ago</small></p></div>
-              </section>
-            </aside>
-          </div>
-          <p className="method-note">CareerSignal measures documented evidence against a selected market. It does not claim to measure your absolute ability.</p>
         </div>
       </main>
     </div>

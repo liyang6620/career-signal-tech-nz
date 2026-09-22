@@ -1,6 +1,6 @@
 # CareerSignal Tech NZ
 
-CareerSignal is an evidence-based career intelligence product for people pursuing technology roles in New Zealand. It connects current market requirements to proof found in a candidate's CV, GitHub projects, tests, deployments, and outcomes, then builds an explainable route toward a selected role.
+CareerSignal is an evidence-based career intelligence platform for New Zealand computing and digital-technology job seekers. It analyses job postings, decodes the real work behind inconsistent role titles, connects market requirements to proof found in CVs and GitHub projects, and builds explainable pathways between technology careers.
 
 This repository is being developed as a production product, not a one-off portfolio dashboard. The current release establishes the product interface, deterministic scoring contract, test suite, containerized API, and CI. **All market counts and benchmarks currently visible in the frontend are labelled demonstration data; they are not presented as live New Zealand market statistics.**
 
@@ -13,18 +13,34 @@ Most career tools rewrite text or return opaque match percentages. CareerSignal 
 - Recommendations identify the smallest credible project change that closes a high-value market gap.
 - Numeric scores are deterministic. AI explains retrieved evidence with citations; it never invents the score.
 
-## Initial role coverage
+## MVP role coverage
 
 - Software Engineer
 - Data & BI Analyst
 - Data Engineer / Analytics Engineer
 - AI Application Engineer
+- Cloud / DevOps Engineer
 
-Cloud/DevOps, Quality Engineering, IT/Systems, Business Technology, and Product/UX are planned after the core taxonomy and evaluation gates are stable.
+The core taxonomy is designed for later expansion into Quality Engineering, IT and Systems, Business Technology, Product and UX, and Cybersecurity without changing the underlying capability model.
+
+## Product modules
+
+- Tech Market Explorer
+- Role Decoder
+- Career Path Map
+- Candidate Evidence Graph
+- Job Fit Explorer
+- SkillRoute
+- Project Builder
+- Evidence RAG
+- Application Portfolio
+- Market Change Alerts
+
+The [product scope](docs/product-scope.md) defines users, module boundaries, the role taxonomy, evidence rules and phased delivery.
 
 ## Product surfaces
 
-The current dashboard includes role/location/seniority context, an explainable capability radar, prioritised actions, a navigable skill evidence graph, and per-skill score contributions. The API provides health, role-family, and scoring endpoints with generated OpenAPI documentation.
+The default frontend is a new-user profile setup flow, not a pre-filled personal dashboard. It collects the target role, location and seniority, accepts optional CV, GitHub and portfolio sources, and asks the user to review the analysis scope. The interface explicitly disables profile creation until ingestion and evidence-review endpoints are implemented. The API currently provides health, role-family, and deterministic scoring endpoints with generated OpenAPI documentation.
 
 ## Explainable scoring
 
@@ -44,6 +60,7 @@ Missing required skills cap a dimension score. The API returns all contributions
 - Frontend: React 19, TypeScript, Vite, ECharts, React Flow
 - API: Python 3.12, FastAPI, Pydantic
 - Data/RAG: PostgreSQL 16 + pgvector; local embeddings by default
+- Analytics/ingestion (planned): DuckDB, Parquet, Python collectors and APScheduler
 - AI: optional OpenAI Responses API with Structured Outputs and cited context
 - Delivery: Docker Compose and GitHub Actions
 

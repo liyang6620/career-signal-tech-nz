@@ -28,8 +28,12 @@ def roles() -> list[RoleFamily]:
         RoleFamily(id="data-bi-analyst", label="Data & BI Analyst", status="active"),
         RoleFamily(id="data-engineer", label="Data Engineer / Analytics Engineer", status="active"),
         RoleFamily(id="ai-application-engineer", label="AI Application Engineer", status="active"),
-        RoleFamily(id="cloud-devops", label="Cloud / DevOps", status="planned"),
+        RoleFamily(id="cloud-devops", label="Cloud / DevOps Engineer", status="active"),
         RoleFamily(id="qa", label="Quality Engineering", status="planned"),
+        RoleFamily(id="it-systems", label="IT and Systems", status="planned"),
+        RoleFamily(id="business-technology", label="Business Technology", status="planned"),
+        RoleFamily(id="product-ux", label="Product and UX", status="planned"),
+        RoleFamily(id="cybersecurity", label="Cybersecurity", status="planned"),
     ]
 
 
