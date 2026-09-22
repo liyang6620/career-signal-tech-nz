@@ -1,8 +1,12 @@
+# ruff: noqa: E501
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
+from urllib.error import HTTPError, URLError
+from urllib.request import Request as UrlRequest
+from urllib.request import urlopen
 from uuid import UUID, uuid4
 
 from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, Header, HTTPException, Request, Response, status
@@ -60,6 +64,8 @@ from .schemas import (
     DimensionScoreResponse,
     EmailRequest,
     EvidenceCitation,
+    EvidenceExplainRequest,
+    EvidenceExplainResponse,
     EvidenceReviewRequest,
     EvidenceSearchRequest,
     EvidenceSearchResponse,
@@ -672,6 +678,41 @@ def search_market_evidence(
         for index, row in enumerate(rows, start=1)
     ]
     return EvidenceSearchResponse(query=payload.query, result_count=len(citations), citations=citations)
+
+
+@app.post("/api/v1/rag/explain", response_model=EvidenceExplainResponse)
+def explain_market_evidence(
+    payload: EvidenceExplainRequest,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EvidenceExplainResponse:
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="AI explanations are not configured")
+    search = search_market_evidence(payload, user, db)
+    if not search.citations:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No market evidence matched this question")
+    evidence = "\n\n".join(
+        f"[{item.citation_id}] {item.title} at {item.company} ({item.location})\n{item.excerpt}\nSource: {item.source_url}"
+        for item in search.citations
+    )
+    request_body = json.dumps({
+        "model": "gpt-4o-mini",
+        "input": [
+            {"role": "system", "content": [{"type": "input_text", "text": "You are CareerSignal's evidence analyst. Answer only from the supplied job evidence. Do not invent market statistics. Cite claims with bracketed citation IDs. Be concise and practical for a New Zealand technology job seeker."}]},
+            {"role": "user", "content": [{"type": "input_text", "text": f"Audience: {payload.audience}\nQuestion: {payload.query}\nEvidence:\n{evidence}"}]},
+        ],
+    }).encode()
+    request = UrlRequest("https://api.openai.com/v1/responses", data=request_body, headers={"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}, method="POST")
+    try:
+        with urlopen(request, timeout=45) as response:
+            result = json.load(response)
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI explanation request failed") from exc
+    answer = result.get("output_text")
+    if not answer:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI explanation returned no text")
+    return EvidenceExplainResponse(query=payload.query, answer=answer, citations=search.citations, model=result.get("model", "gpt-4o-mini"))
 
 
 @app.post("/api/v1/rag/judgements", response_model=RetrievalJudgementResponse, status_code=status.HTTP_201_CREATED)

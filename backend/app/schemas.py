@@ -388,6 +388,17 @@ class EvidenceSearchResponse(BaseModel):
     retrieval_method: str = "filtered hybrid RRF: PostgreSQL FTS + pgvector cosine"
 
 
+class EvidenceExplainRequest(EvidenceSearchRequest):
+    audience: str = Field(default="technology job seeker", max_length=120)
+
+
+class EvidenceExplainResponse(BaseModel):
+    query: str
+    answer: str
+    citations: list[EvidenceCitation]
+    model: str
+
+
 class RagEvaluationResponse(BaseModel):
     status: Literal["ok", "insufficient_data"]
     case_count: int
