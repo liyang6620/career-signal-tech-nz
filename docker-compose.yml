@@ -1,0 +1,31 @@
+services:
+  database:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: career_signal
+      POSTGRES_USER: career_signal
+      POSTGRES_PASSWORD: career_signal
+    ports:
+      - "5432:5432"
+    volumes:
+      - career_signal_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U career_signal -d career_signal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://career_signal:career_signal@database:5432/career_signal
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+
+volumes:
+  career_signal_data:
