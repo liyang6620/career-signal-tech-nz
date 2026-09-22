@@ -212,7 +212,21 @@ select {
 .path-grid button { margin-top:18px; border:0; background:transparent; color:#1f6348; font-size:14px; font-weight:700; cursor:pointer; }
 .route-list { grid-template-columns:repeat(3,1fr); }
 .route-list .primary-button { margin-top:18px; }
+.evidence-network { position:relative; min-height:420px; display:grid; grid-template-columns:repeat(3,1fr); gap:28px 18px; align-items:center; padding:30px 12px; overflow:hidden; }
+.evidence-network::before { content:""; position:absolute; left:50%; top:50%; width:42%; height:1px; background:#b7cfc3; transform:translate(-50%,-50%); box-shadow:0 -92px 0 #d8e6df, 0 92px 0 #d8e6df; }
+.network-role { position:absolute; z-index:2; left:50%; top:50%; transform:translate(-50%,-50%); width:150px; min-height:100px; display:grid; place-items:center; align-content:center; gap:6px; padding:15px; border:2px solid #1f6348; border-radius:50%; background:#edf6f1; color:#1f6348; text-align:center; }
+.network-role b { font-size:14px; line-height:1.25; }
+.network-role small { color:#6c8075; font-size:11px; }
+.network-skill { position:relative; z-index:1; min-height:72px; display:grid; align-content:center; gap:5px; padding:13px 14px; border:1px solid #d2ddd7; border-radius:7px; background:#fff; box-shadow:0 3px 10px rgba(31,61,48,.06); }
+.network-skill::after { content:""; position:absolute; width:35px; height:1px; background:#b7cfc3; right:-35px; top:50%; }
+.network-skill:nth-child(3n)::after { right:auto; left:-35px; }
+.network-skill span { color:#283039; font-size:14px; font-weight:700; }
+.network-skill small { color:#697780; font-size:12px; }
+.network-skill em { position:absolute; right:8px; top:7px; color:#a2682e; font-size:10px; font-style:normal; }
+.network-skill.supported { border-color:#9fc7b3; background:#f4faf6; }
+.network-skill.missing { border-color:#e1c7b4; background:#fffaf6; }
 @media (max-width:700px) { .path-grid, .route-list { grid-template-columns:1fr; } }
+@media (max-width:700px) { .evidence-network { grid-template-columns:1fr 1fr; min-height:620px; gap:14px; } .network-role { width:125px; min-height:85px; } .network-skill::after { display:none; } }
 .product-shell .topbar, .product-shell .quiet-button, .product-shell .stepper span, .product-shell .stepper i { font-size: 14px; }
 .product-shell .panel-title h2 { font-size: 21px; }
 .product-shell .setup-header h1 { font-size: 32px; }
