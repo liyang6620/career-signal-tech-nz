@@ -15,6 +15,7 @@ import {
   LogOut,
   MapPin,
   Plus,
+  Search,
   Settings,
   ShieldCheck,
   Target,
@@ -41,7 +42,8 @@ type EvidenceSuggestion = { id: string; canonical_skill: string; category: strin
 type GithubProject = { id: string; repository: string; status: string; suggestions: EvidenceSuggestion[] };
 type FitContribution = { skill_slug: string; skill_name: string; weight: number; required: boolean; evidence_level: number; normalized_score: number; weighted_score: number };
 type RoleFit = { role_family: string; score: number; coverage: number; evidence_depth: number; cap_applied: boolean; contributions: FitContribution[] };
-type ProductView = "workspace" | "market" | "decoder";
+type ProductView = "workspace" | "market" | "decoder" | "evidence";
+type EvidenceResult = { citation_id: string; title: string; company: string; location: string; source_url: string; published_at: string | null; excerpt: string; retrieval_score: number };
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string, user: SessionUser) => void }) {
   const resetToken = new URLSearchParams(window.location.search).get("reset");
@@ -141,6 +143,9 @@ export default function App() {
   const [decodedRole, setDecodedRole] = useState<{ role_label: string; confidence: number; seniority: string; matched_skills: { name: string; mention_count: number }[] } | null>(null);
   const [market, setMarket] = useState<{ posting_count: number; roles: { role_family: string; count: number }[]; top_skills: { skill_name: string; count: number }[]; locations: { location: string; count: number }[] } | null>(null);
   const [marketQuality, setMarketQuality] = useState<{ missing_publication_date_percent: number; low_confidence_count: number; stale_posting_count: number; collector_completed_count: number; collector_failed_count: number; sources: { name: string; adapter: string; enabled: boolean; latest_status: string | null; last_run_at: string | null; accepted_count: number; rejected_count: number }[] } | null>(null);
+  const [evidenceQuery, setEvidenceQuery] = useState("");
+  const [evidenceResults, setEvidenceResults] = useState<EvidenceResult[] | null>(null);
+  const [searchingEvidence, setSearchingEvidence] = useState(false);
 
   useEffect(() => {
     fetch(`${API_URL}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
@@ -267,6 +272,26 @@ export default function App() {
     if (qualityResponse.ok) setMarketQuality(await qualityResponse.json());
   }
 
+  async function searchEvidence(event: FormEvent) {
+    event.preventDefault();
+    setSearchingEvidence(true);
+    setError("");
+    try {
+      const response = await fetch(`${API_URL}/api/v1/rag/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ query: evidenceQuery, role_family: role || null, location, market_window_days: 180, limit: 8 }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail ?? "Could not search market evidence");
+      setEvidenceResults(result.citations);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not search market evidence");
+    } finally {
+      setSearchingEvidence(false);
+    }
+  }
+
   if (checkingSession) return <div className="session-loading"><span>CS</span><div><i /><i /><i /></div></div>;
   if (!token || !user) return <AuthScreen onAuthenticated={(accessToken, sessionUser) => { setToken(accessToken); setUser(sessionUser); }} />;
   if (!user.is_verified) return <VerifyEmailScreen token={token} user={user} onVerified={() => setUser({ ...user, is_verified: true })} onSignOut={logout} />;
@@ -313,6 +338,7 @@ export default function App() {
           <button className={view === "workspace" ? "active" : ""} onClick={() => setView("workspace")}><LayoutDashboard size={17} />Workspace</button>
           <button className={view === "market" ? "active" : ""} onClick={openMarket}><BarChart3 size={17} />Market explorer</button>
           <button className={view === "decoder" ? "active" : ""} onClick={() => setView("decoder")}><BriefcaseBusiness size={17} />Role decoder</button>
+          <button className={view === "evidence" ? "active" : ""} onClick={() => setView("evidence")}><Search size={17} />Evidence search</button>
           <a><Target size={17} />Career path map</a>
           <a><FileText size={17} />Evidence graph</a>
           <a><BookOpen size={17} />SkillRoute</a>
@@ -328,6 +354,7 @@ export default function App() {
         </header>
 
         {view === "decoder" && <div className="tool-page"><header><p>Role decoder</p><h1>Decode the work behind the title</h1><span>Classification uses responsibilities and explicit skills. No AI model is involved.</span></header><section className="tool-panel"><form onSubmit={decodeJob}><label className="field"><span>Advertised title</span><input required minLength={2} value={decoderTitle} onChange={(event) => setDecoderTitle(event.target.value)} /></label><label className="field"><span>Responsibilities and requirements</span><textarea required minLength={40} value={decoderDescription} onChange={(event) => setDecoderDescription(event.target.value)} /></label><button className="primary-button">Analyse role <ArrowRight size={15} /></button></form>{decodedRole && <div className="decoder-result"><small>Best classification</small><h2>{decodedRole.role_label}</h2><p>{Math.round(decodedRole.confidence * 100)}% rule confidence · {decodedRole.seniority}</p><div>{decodedRole.matched_skills.map((skill) => <span key={skill.name}>{skill.name} <b>{skill.mention_count}</b></span>)}</div></div>}{error && <p className="form-error">{error}</p>}</section></div>}
+        {view === "evidence" && <div className="tool-page"><header><p>Evidence RAG</p><h1>Search what employers actually ask for</h1><span>Results come from indexed, governed job records and link back to the original source.</span></header><section className="tool-panel evidence-search"><form onSubmit={searchEvidence}><label className="field"><span>Market question or capability</span><input required minLength={3} maxLength={500} value={evidenceQuery} onChange={(event) => setEvidenceQuery(event.target.value)} placeholder="e.g. testing expectations for junior data engineers" /></label><button className="primary-button" disabled={searchingEvidence}><Search size={15} />{searchingEvidence ? "Searching..." : "Search evidence"}</button></form>{evidenceResults && <div className="citation-list">{evidenceResults.length ? evidenceResults.map((item) => <article key={item.citation_id}><div><b>{item.citation_id}</b><span>{item.company} · {item.location}</span></div><h2>{item.title}</h2><p>{item.excerpt}</p><footer><span>{item.published_at ? new Date(item.published_at).toLocaleDateString("en-NZ") : "Publication date unavailable"}</span><a href={item.source_url} target="_blank" rel="noreferrer">View source <ArrowRight size={13} /></a></footer></article>) : <div className="market-empty"><Search size={24} /><h2>No matching indexed evidence</h2><p>Try a broader query or remove the current role and location filters from your career profile.</p></div>}</div>}{error && <p className="form-error">{error}</p>}</section></div>}
         {view === "market" && <div className="tool-page"><header><p>Tech market explorer</p><h1>Imported New Zealand market evidence</h1><span>Only governed sources with recorded permission basis appear here.</span></header><section className="tool-panel">{market?.posting_count ? <><div className="market-total"><strong>{market.posting_count}</strong><span>classified postings</span></div><div className="market-columns"><div><h3>Role families</h3>{market.roles.map((item) => <p key={item.role_family}><span>{roles[item.role_family as Exclude<RoleKey, "">] ?? item.role_family}</span><b>{item.count}</b></p>)}</div><div><h3>Top skills</h3>{market.top_skills.map((item) => <p key={item.skill_name}><span>{item.skill_name}</span><b>{item.count}</b></p>)}</div><div><h3>Locations</h3>{market.locations.map((item) => <p key={item.location}><span>{item.location}</span><b>{item.count}</b></p>)}</div></div>{marketQuality && <div className="quality-report"><div><h3>Data quality</h3><p><span>Missing publication dates</span><b>{marketQuality.missing_publication_date_percent}%</b></p><p><span>Low-confidence classifications</span><b>{marketQuality.low_confidence_count}</b></p><p><span>Postings older than 90 days</span><b>{marketQuality.stale_posting_count}</b></p></div><div><h3>Collector health</h3><p><span>Completed runs</span><b>{marketQuality.collector_completed_count}</b></p><p><span>Failed runs</span><b>{marketQuality.collector_failed_count}</b></p></div><div><h3>Source freshness</h3>{marketQuality.sources.length ? marketQuality.sources.map((source) => <p key={`${source.adapter}-${source.name}`}><span>{source.name}<small>{source.adapter} · {source.last_run_at ? new Date(source.last_run_at).toLocaleDateString("en-NZ") : "not run"}</small></span><b className={source.latest_status === "failed" ? "quality-bad" : ""}>{source.latest_status ?? "pending"}</b></p>) : <p><span>No automated sources registered</span></p>}</div></div>}</> : <div className="market-empty"><BarChart3 size={24} /><h2>No governed market dataset loaded</h2><p>CareerSignal will not display fabricated counts. Import permitted company-career or licensed records through the ingestion API.</p></div>}</section></div>}
         {view === "workspace" && <div className="setup-page">
           <header className="setup-header">

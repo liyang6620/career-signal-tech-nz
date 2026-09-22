@@ -37,6 +37,7 @@ from .models import (
     EvidenceUpload,
     GithubProject,
     GithubSuggestion,
+    JobChunk,
     JobPosting,
     JobPostingSkill,
     MarketSource,
@@ -45,6 +46,7 @@ from .models import (
     RefreshSession,
     User,
 )
+from .rag import embed_query, index_job_postings, search_job_evidence
 from .role_decoder import ROLE_LABELS, decode_role
 from .schemas import (
     AuthResponse,
@@ -55,7 +57,10 @@ from .schemas import (
     DimensionScoreRequest,
     DimensionScoreResponse,
     EmailRequest,
+    EvidenceCitation,
     EvidenceReviewRequest,
+    EvidenceSearchRequest,
+    EvidenceSearchResponse,
     ExtractionResponse,
     GithubProjectRequest,
     GithubProjectResponse,
@@ -67,6 +72,8 @@ from .schemas import (
     MarketSummaryResponse,
     ProfileResponse,
     ProfileSetupRequest,
+    RagIndexRequest,
+    RagIndexResponse,
     RegisterRequest,
     ResetPasswordRequest,
     RoleDecodeRequest,
@@ -607,6 +614,58 @@ def market_quality(
         or 0,
         sources=source_quality,
     )
+
+
+@app.post("/api/v1/rag/index", response_model=RagIndexResponse)
+def index_market_evidence(
+    payload: RagIndexRequest,
+    db: Annotated[Session, Depends(get_db)],
+    ingestion_key: Annotated[str | None, Header(alias="X-Ingestion-Key")] = None,
+) -> RagIndexResponse:
+    require_ingestion_key(ingestion_key)
+    return RagIndexResponse(**index_job_postings(db, limit=payload.limit))
+
+
+@app.post("/api/v1/rag/search", response_model=EvidenceSearchResponse)
+def search_market_evidence(
+    payload: EvidenceSearchRequest,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EvidenceSearchResponse:
+    if not db.scalar(select(func.count(JobChunk.id))):
+        return EvidenceSearchResponse(query=payload.query, result_count=0, citations=[])
+    vector = embed_query(payload.query)
+    published_after = (
+        datetime.now(UTC) - timedelta(days=payload.market_window_days)
+        if payload.market_window_days is not None
+        else None
+    )
+    rows = search_job_evidence(
+        db,
+        payload.query,
+        vector,
+        role_family=payload.role_family,
+        location=payload.location,
+        seniority=payload.seniority,
+        published_after=published_after,
+        limit=payload.limit,
+    )
+    citations = [
+        EvidenceCitation(
+            citation_id=f"J{index}",
+            title=row["title"],
+            company=row["company"],
+            location=row["location"],
+            role_family=row["role_family"],
+            seniority=row["seniority"],
+            source_url=row["source_url"],
+            published_at=row["published_at"],
+            excerpt=row["content"],
+            retrieval_score=round(float(row["hybrid_score"]), 6),
+        )
+        for index, row in enumerate(rows, start=1)
+    ]
+    return EvidenceSearchResponse(query=payload.query, result_count=len(citations), citations=citations)
 
 
 def profile_response(profile: CareerProfile) -> ProfileResponse:

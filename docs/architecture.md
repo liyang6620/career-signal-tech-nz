@@ -87,7 +87,9 @@ The dimension score is `65% coverage + 35% evidence depth`. A missing required h
 
 ## RAG design
 
-PostgreSQL is the system of record and pgvector supports semantic retrieval. Local embeddings are the default to keep development free. Retrieval is filtered first by role, geography, seniority, freshness, and source permission; vector similarity then ranks relevant passages. OpenAI Structured Outputs will generate typed explanations from retrieved citations.
+PostgreSQL is the system of record and pgvector supports semantic retrieval. Governed job descriptions are split into bounded overlapping chunks and embedded locally with `BAAI/bge-small-en-v1.5`; posting content hashes and model identifiers make indexing incremental and auditable. The model cache persists independently of API containers.
+
+Retrieval filters first by role family, location, seniority and publication window. PostgreSQL English full-text search and pgvector cosine search each produce a ranked candidate list, then reciprocal-rank fusion combines them without model-generated relevance scores. Results expose the original posting URL, excerpt, publication date and deterministic citation label. OpenAI may later explain these retrieved citations with typed outputs, but is not part of indexing, retrieval or scoring.
 
 ## Production evolution
 

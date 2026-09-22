@@ -239,6 +239,16 @@ select {
 .quality-report small { display: block; margin-top: 3px; color: #89919a; font-size: 9px; }
 .quality-report b { color: #283039; font-weight: 600; }
 .quality-report .quality-bad { color: #a33b36; }
+.evidence-search form { grid-template-columns: 1fr auto; align-items: end; }
+.evidence-search form .primary-button { min-height: 39px; }
+.citation-list { display: grid; gap: 0; margin-top: 24px; border-top: 1px solid #e4e8e6; }
+.citation-list article { padding: 20px 0; border-bottom: 1px solid #e4e8e6; }
+.citation-list article > div { display: flex; align-items: center; gap: 9px; color: #737c84; font-size: 10px; }
+.citation-list article > div b { padding: 3px 5px; background: #e9f2ed; color: #1f5c45; }
+.citation-list h2 { margin: 8px 0; color: #283039; font-size: 15px; }
+.citation-list p { margin: 0; color: #56616a; font-size: 11px; line-height: 1.65; }
+.citation-list footer { display: flex; justify-content: space-between; margin-top: 11px; color: #89919a; font-size: 9px; }
+.citation-list footer a { display: inline-flex; align-items: center; gap: 4px; color: #1f5c45; font-size: 10px; font-weight: 600; text-decoration: none; }
 .sidebar-bottom {
   display: grid;
   margin-top: auto;
@@ -755,6 +765,7 @@ select {
   }
   .tool-page { width: min(100% - 28px, 920px); padding-top: 30px; }
   .market-columns, .quality-report { grid-template-columns: 1fr; }
+  .evidence-search form { grid-template-columns: 1fr; }
   .setup-header {
     text-align: left;
   }

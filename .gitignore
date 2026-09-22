@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .pytest-tmp*/
 .ruff_cache/
+.cache/
 *.py[cod]
 frontend/node_modules/
 frontend/dist/

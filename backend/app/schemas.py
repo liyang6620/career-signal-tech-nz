@@ -347,3 +347,42 @@ class MarketQualityResponse(BaseModel):
     collector_completed_count: int
     collector_failed_count: int
     sources: list[dict[str, str | int | bool | None]]
+
+
+class RagIndexRequest(BaseModel):
+    limit: int = Field(default=500, ge=1, le=5000)
+
+
+class RagIndexResponse(BaseModel):
+    indexed_postings: int
+    skipped_postings: int
+    created_chunks: int
+
+
+class EvidenceSearchRequest(BaseModel):
+    query: str = Field(min_length=3, max_length=500)
+    role_family: str | None = Field(default=None, max_length=80)
+    location: str | None = Field(default=None, max_length=120)
+    seniority: str | None = Field(default=None, max_length=50)
+    market_window_days: int | None = Field(default=180, ge=7, le=730)
+    limit: int = Field(default=8, ge=1, le=20)
+
+
+class EvidenceCitation(BaseModel):
+    citation_id: str
+    title: str
+    company: str
+    location: str
+    role_family: str
+    seniority: str
+    source_url: str
+    published_at: datetime | None
+    excerpt: str
+    retrieval_score: float
+
+
+class EvidenceSearchResponse(BaseModel):
+    query: str
+    result_count: int
+    citations: list[EvidenceCitation]
+    retrieval_method: str = "filtered hybrid RRF: PostgreSQL FTS + pgvector cosine"

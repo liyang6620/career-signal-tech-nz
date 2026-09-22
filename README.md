@@ -115,6 +115,12 @@ cd frontend && npm run lint && npm run build
 
 CI runs the same checks on every pull request and push to `main`.
 
+## Evidence retrieval
+
+The current RAG foundation indexes governed job descriptions into bounded, versioned chunks using the free local `BAAI/bge-small-en-v1.5` embedding model with its passage/query modes. Unchanged postings are skipped using their content hash. Retrieval applies optional role-family, location, seniority and publication-window filters before combining PostgreSQL full-text ranking with pgvector cosine ranking through reciprocal-rank fusion.
+
+`POST /api/v1/rag/index` is protected by the ingestion credential. `POST /api/v1/rag/search` is available to verified users and returns excerpts with stable citation labels, original job URLs, publication dates and retrieval scores. It does not generate an answer or a market claim. The first indexing run downloads the local model into a persistent Docker cache volume; no OpenAI key is used.
+
 ## Data acquisition and compliance
 
 Governed ingestion supports permitted Greenhouse and Lever job-board endpoints plus `schema.org/JobPosting` on a configured HTTPS company careers page. Every collector source requires a recorded permission basis, and every bounded run retains its status, accepted/rejected counts, timestamps and a bounded failure reason. Only records with an explicit New Zealand location are accepted. Manual permitted imports use the same deterministic classification, hashing, URL upsert and skill-replacement path.
@@ -126,14 +132,14 @@ The collectors are admin-triggered and synchronous with a 20-second network time
 1. Versioned job, skill, source, and candidate-evidence schema with migrations.
 2. Compliant job ingestion, deduplication, freshness monitoring, and data-quality reports.
 3. OCR and deeper GitHub repository inspection with user confirmation and provenance.
-4. pgvector retrieval with locally generated embeddings and citation evaluation.
+4. Retrieval evaluation sets, citation-grounded explanations and relevance monitoring.
 5. OpenAI explanation layer with typed outputs, cost budgets, and regression evals.
 6. Telemetry, backups, restore drills, and deployment runbooks.
 7. Real-user validation of scoring weights and recommendation usefulness.
 
 ## Production-readiness status
 
-The repository currently provides a tested foundation rather than claiming production operation. Authentication, private CV ingestion, public GitHub evidence, explicit evidence review, a canonical skill taxonomy, deterministic role fit, governed job-posting imports and collectors, Role Decoder and a live-data-only Market Explorer are implemented. Market writes require a separate ingestion credential and retain source URL, permission basis, retrieval time and content hash. Collector runs and data-quality indicators expose freshness, rejection, missing-date, stale-record and classification-confidence risks. The explorer intentionally shows an empty state until permitted records are loaded; it never substitutes demonstration counts. OCR, embeddings, semantic evidence inference, repository code inspection, scheduled ingestion and broad live-market coverage are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
+The repository currently provides a tested foundation rather than claiming production operation. Authentication, private CV ingestion, public GitHub evidence, explicit evidence review, a canonical skill taxonomy, deterministic role fit, governed job-posting imports and collectors, Role Decoder, local pgvector hybrid retrieval and a live-data-only Market Explorer are implemented. Market writes require a separate ingestion credential and retain source URL, permission basis, retrieval time and content hash. Collector runs and data-quality indicators expose freshness, rejection, missing-date, stale-record and classification-confidence risks. Retrieval returns source-linked evidence rather than an uncited generated answer. The explorer intentionally shows an empty state until permitted records are loaded; it never substitutes demonstration counts. OCR, semantic CV inference, repository code inspection, scheduled ingestion, RAG relevance evaluation and broad live-market coverage are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
 
 ## License
 

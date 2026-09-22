@@ -28,6 +28,7 @@ services:
       STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-development-storage-secret}
       CLAMAV_HOST: antivirus
       INGESTION_API_KEY: ${INGESTION_API_KEY:-development-ingestion-key}
+      EMBEDDING_CACHE_PATH: /home/appuser/.cache/fastembed
     ports:
       - "8000:8000"
     depends_on:
@@ -35,6 +36,8 @@ services:
         condition: service_healthy
       storage:
         condition: service_started
+    volumes:
+      - career_signal_models:/home/appuser/.cache/fastembed
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -86,3 +89,4 @@ volumes:
   career_signal_data:
   career_signal_storage:
   clamav_data:
+  career_signal_models:

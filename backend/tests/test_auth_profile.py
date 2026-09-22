@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.github import GithubSnapshot
 from app.main import app
-from app.models import DocumentExtraction, EvidenceSuggestion, EvidenceUpload
+from app.models import DocumentExtraction, EvidenceSuggestion, EvidenceUpload, JobChunk, JobPosting, MarketSource
 
 
 @pytest.fixture
@@ -426,3 +426,67 @@ def test_role_decoder_and_governed_market_import(client: TestClient) -> None:
     assert summary.status_code == 200
     assert summary.json()["posting_count"] == 1
     assert summary.json()["roles"][0]["role_family"] == "data-engineer"
+
+
+def test_evidence_search_returns_source_citations(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    auth = register(client)
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+    with client.testing_session() as db:  # type: ignore[attr-defined]
+        source = MarketSource(
+            name="Citation fixture",
+            source_type="manual-permitted",
+            permission_basis="Test fixture permission",
+            base_url="https://jobs.example.com",
+        )
+        db.add(source)
+        db.flush()
+        posting = JobPosting(
+            source_id=source.id,
+            source_url="https://jobs.example.com/1",
+            content_hash="c" * 64,
+            title="Junior Data Engineer",
+            company="Example Ltd",
+            location="Auckland",
+            description="Build tested Python and SQL pipelines for reporting.",
+            role_family="data-engineer",
+            seniority="junior",
+            classification_confidence=0.8,
+        )
+        db.add(posting)
+        db.flush()
+        db.add(
+            JobChunk(
+                posting_id=posting.id,
+                chunk_index=0,
+                content=posting.description,
+                posting_content_hash=posting.content_hash,
+                embedding_model="BAAI/bge-small-en-v1.5",
+                embedding=[0.01] * 384,
+            )
+        )
+        db.commit()
+    monkeypatch.setattr("app.main.embed_query", lambda value: [0.01] * 384)
+    monkeypatch.setattr(
+        "app.main.search_job_evidence",
+        lambda *args, **kwargs: [
+            {
+                "title": "Junior Data Engineer",
+                "company": "Example Ltd",
+                "location": "Auckland",
+                "role_family": "data-engineer",
+                "seniority": "junior",
+                "source_url": "https://jobs.example.com/1",
+                "published_at": None,
+                "content": "Build tested Python and SQL pipelines for reporting.",
+                "hybrid_score": 0.0312,
+            }
+        ],
+    )
+    response = client.post(
+        "/api/v1/rag/search",
+        headers=headers,
+        json={"query": "testing expectations", "role_family": "data-engineer"},
+    )
+    assert response.status_code == 200
+    assert response.json()["citations"][0]["citation_id"] == "J1"
+    assert response.json()["citations"][0]["source_url"] == "https://jobs.example.com/1"

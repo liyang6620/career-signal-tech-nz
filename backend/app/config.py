@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "CareerSignal Tech NZ API"
     environment: str = "development"
-    database_url: str = "postgresql+psycopg://career_signal:career_signal@localhost:5432/career_signal"
+    database_url: str = "postgresql+psycopg://career_signal:career_signal@127.0.0.1:5432/career_signal"
     openai_api_key: str | None = None
     cors_origins: str = "http://localhost:5173"
     jwt_secret: str = "development-only-change-me-at-least-32-bytes"
@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     clamav_port: int = 3310
     upload_max_bytes: int = 10 * 1024 * 1024
     ingestion_api_key: str = "development-ingestion-key"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_cache_path: str = ".cache/fastembed"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
