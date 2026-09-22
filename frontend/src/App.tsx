@@ -13,58 +13,43 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
+  ArrowRight,
   BarChart3,
+  BookOpen,
   BriefcaseBusiness,
-  ChevronDown,
-  Database,
-  ExternalLink,
+  Check,
+  CircleUserRound,
+  FileText,
   GitBranch,
+  LayoutDashboard,
   MapPin,
+  MoreHorizontal,
   Search,
+  Settings,
   Sparkles,
   Target,
 } from "lucide-react";
 import "./App.css";
 
 type RoleKey = "software" | "data-analyst" | "data-engineer" | "ai";
-const roles: Record<
-  RoleKey,
-  { label: string; count: number; scores: number[] }
-> = {
-  software: {
-    label: "Software Engineer",
-    count: 214,
-    scores: [72, 54, 78, 66, 61, 74],
-  },
-  "data-analyst": {
-    label: "Data & BI Analyst",
-    count: 128,
-    scores: [68, 88, 61, 52, 86, 79],
-  },
-  "data-engineer": {
-    label: "Data Engineer",
-    count: 94,
-    scores: [74, 81, 71, 76, 69, 65],
-  },
-  ai: {
-    label: "AI Application Engineer",
-    count: 67,
-    scores: [76, 65, 74, 68, 78, 72],
-  },
+
+const roles: Record<RoleKey, { label: string; count: number; scores: number[] }> = {
+  software: { label: "Software Engineer", count: 214, scores: [72, 54, 78, 66, 61, 74] },
+  "data-analyst": { label: "Data & BI Analyst", count: 128, scores: [68, 88, 61, 52, 86, 79] },
+  "data-engineer": { label: "Data Engineer", count: 94, scores: [74, 81, 71, 76, 69, 65] },
+  ai: { label: "AI Application Engineer", count: 67, scores: [76, 65, 74, 68, 78, 72] },
 };
-const dimensions = [
-  "Programming",
-  "Data & DBs",
-  "Systems",
-  "Cloud & Delivery",
-  "Analysis",
-  "Product",
+
+const dimensions = ["Programming", "Data", "Systems", "Delivery", "Analysis", "Product"];
+const skillRows = [
+  { skill: "SQL", demand: 82, level: "Strong evidence", score: 84, source: "NZ Migration Pipeline", tone: "strong" },
+  { skill: "Python", demand: 68, level: "Strong evidence", score: 81, source: "AI Data Workspace", tone: "strong" },
+  { skill: "Cloud platforms", demand: 49, level: "Strong evidence", score: 79, source: "AWS Pipeline", tone: "strong" },
+  { skill: "Data modelling", demand: 44, level: "Needs proof", score: 38, source: "CV mention only", tone: "partial" },
+  { skill: "Orchestration", demand: 36, level: "No evidence", score: 0, source: "Not found", tone: "missing" },
 ];
-type SkillNodeData = {
-  label: string;
-  status: "strong" | "partial" | "gap" | "role";
-  detail: string;
-};
+
+type SkillNodeData = { label: string; status: "strong" | "partial" | "gap" | "role"; detail: string };
 function SkillNode({ data }: NodeProps<Node<SkillNodeData>>) {
   return (
     <div className={`skill-node ${data.status}`} title={data.detail}>
@@ -75,402 +60,127 @@ function SkillNode({ data }: NodeProps<Node<SkillNodeData>>) {
   );
 }
 const nodeTypes = { skill: SkillNode };
-const skillNodes: Node<SkillNodeData>[] = [
-  {
-    id: "role",
-    type: "skill",
-    position: { x: 20, y: 165 },
-    data: {
-      label: "Data Engineer",
-      status: "role",
-      detail: "Selected target role",
-    },
-  },
-  {
-    id: "sql",
-    type: "skill",
-    position: { x: 235, y: 35 },
-    data: {
-      label: "SQL",
-      status: "strong",
-      detail: "Verified by Athena reporting and analytics projects",
-    },
-  },
-  {
-    id: "python",
-    type: "skill",
-    position: { x: 235, y: 125 },
-    data: {
-      label: "Python",
-      status: "strong",
-      detail: "Verified by deployed applications and data pipelines",
-    },
-  },
-  {
-    id: "model",
-    type: "skill",
-    position: { x: 235, y: 215 },
-    data: {
-      label: "Data modelling",
-      status: "partial",
-      detail: "Mentioned, but implementation evidence is limited",
-    },
-  },
-  {
-    id: "orch",
-    type: "skill",
-    position: { x: 235, y: 305 },
-    data: {
-      label: "Orchestration",
-      status: "gap",
-      detail: "No current project evidence",
-    },
-  },
-  {
-    id: "aws",
-    type: "skill",
-    position: { x: 465, y: 75 },
-    data: {
-      label: "AWS pipeline",
-      status: "strong",
-      detail: "S3, Glue, Athena and EventBridge project evidence",
-    },
-  },
-  {
-    id: "dbt",
-    type: "skill",
-    position: { x: 465, y: 205 },
-    data: {
-      label: "dbt",
-      status: "gap",
-      detail: "Appears in 29% of current sample roles",
-    },
-  },
-  {
-    id: "testing",
-    type: "skill",
-    position: { x: 465, y: 295 },
-    data: {
-      label: "Data testing",
-      status: "partial",
-      detail: "Validation exists; automated test evidence is incomplete",
-    },
-  },
+const nodes: Node<SkillNodeData>[] = [
+  { id: "role", type: "skill", position: { x: 20, y: 165 }, data: { label: "Data Engineer", status: "role", detail: "Selected target role" } },
+  { id: "sql", type: "skill", position: { x: 235, y: 35 }, data: { label: "SQL", status: "strong", detail: "Verified in projects" } },
+  { id: "python", type: "skill", position: { x: 235, y: 125 }, data: { label: "Python", status: "strong", detail: "Verified in projects" } },
+  { id: "model", type: "skill", position: { x: 235, y: 215 }, data: { label: "Data modelling", status: "partial", detail: "Limited implementation proof" } },
+  { id: "orch", type: "skill", position: { x: 235, y: 305 }, data: { label: "Orchestration", status: "gap", detail: "No current evidence" } },
+  { id: "aws", type: "skill", position: { x: 465, y: 75 }, data: { label: "AWS pipeline", status: "strong", detail: "S3, Glue, Athena and EventBridge" } },
+  { id: "dbt", type: "skill", position: { x: 465, y: 205 }, data: { label: "dbt", status: "gap", detail: "Appears in 29% of sample roles" } },
+  { id: "testing", type: "skill", position: { x: 465, y: 295 }, data: { label: "Data testing", status: "partial", detail: "Automation evidence incomplete" } },
 ];
-const skillEdges: Edge[] = [
-  ["role", "sql"],
-  ["role", "python"],
-  ["role", "model"],
-  ["role", "orch"],
-  ["sql", "aws"],
-  ["python", "aws"],
-  ["model", "dbt"],
-  ["orch", "testing"],
-].map(([source, target], index) => ({
+const edges: Edge[] = [["role", "sql"], ["role", "python"], ["role", "model"], ["role", "orch"], ["sql", "aws"], ["python", "aws"], ["model", "dbt"], ["orch", "testing"]].map(([source, target], index) => ({
   id: `e-${index}`,
   source,
   target,
-  markerEnd: { type: MarkerType.ArrowClosed, color: "#889197" },
-  style: { stroke: "#889197", strokeWidth: 1.4 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: "#9aa2a9" },
+  style: { stroke: "#9aa2a9", strokeWidth: 1.2 },
 }));
-const evidenceRows = [
-  {
-    skill: "SQL",
-    demand: "82%",
-    level: "Verified",
-    score: 84,
-    source: "NZ Migration Pipeline",
-  },
-  {
-    skill: "Python",
-    demand: "68%",
-    level: "Verified",
-    score: 81,
-    source: "AI Data Workspace",
-  },
-  {
-    skill: "Cloud platform",
-    demand: "49%",
-    level: "Verified",
-    score: 79,
-    source: "AWS Pipeline",
-  },
-  {
-    skill: "Data modelling",
-    demand: "44%",
-    level: "Claimed",
-    score: 38,
-    source: "CV only",
-  },
-  {
-    skill: "Orchestration",
-    demand: "36%",
-    level: "Missing",
-    score: 0,
-    source: "No evidence",
-  },
-];
 
 export default function App() {
   const [role, setRole] = useState<RoleKey>("data-engineer");
+  const [view, setView] = useState<"list" | "network">("list");
   const selected = roles[role];
-  const radarOption = useMemo(
-    () => ({
-      animationDuration: 700,
-      tooltip: { trigger: "item" },
-      radar: {
-        radius: "66%",
-        center: ["56%", "50%"],
-        splitNumber: 5,
-        indicator: dimensions.map((name) => ({ name, max: 100 })),
-        axisName: { color: "#30363a", fontSize: 12 },
-        splitArea: { areaStyle: { color: ["#fbfcfc", "#f5f7f6"] } },
-        splitLine: { lineStyle: { color: "#dce2df" } },
-        axisLine: { lineStyle: { color: "#cdd5d1" } },
-      },
-      series: [
-        {
-          type: "radar",
-          data: [
-            {
-              value: selected.scores,
-              name: "Current evidence coverage",
-              symbolSize: 6,
-              lineStyle: { color: "#087f5b", width: 2 },
-              itemStyle: { color: "#087f5b" },
-              areaStyle: { color: "rgba(8, 127, 91, 0.22)" },
-            },
-            {
-              value: [82, 84, 78, 74, 72, 70],
-              name: "Market benchmark",
-              symbol: "none",
-              lineStyle: { color: "#d97706", width: 1.5, type: "dashed" },
-              areaStyle: { opacity: 0 },
-            },
-          ],
-        },
-      ],
-    }),
-    [selected],
-  );
-  const overall = Math.round(
-    selected.scores.reduce((sum, value) => sum + value, 0) /
-      selected.scores.length,
-  );
+  const overall = Math.round(selected.scores.reduce((sum, value) => sum + value, 0) / selected.scores.length);
+  const radarOption = useMemo(() => ({
+    animationDuration: 400,
+    tooltip: { trigger: "item" },
+    radar: {
+      radius: "58%",
+      center: ["50%", "51%"],
+      splitNumber: 4,
+      indicator: dimensions.map((name) => ({ name, max: 100 })),
+      axisName: { color: "#59616a", fontSize: 11 },
+      splitArea: { show: false },
+      splitLine: { lineStyle: { color: "#e2e5e9" } },
+      axisLine: { lineStyle: { color: "#e2e5e9" } },
+    },
+    series: [{ type: "radar", data: [
+      { value: selected.scores, name: "Your evidence", symbolSize: 4, lineStyle: { color: "#166534", width: 2 }, itemStyle: { color: "#166534" }, areaStyle: { color: "rgba(22,101,52,.12)" } },
+      { value: [82, 84, 78, 74, 72, 70], name: "Role benchmark", symbol: "none", lineStyle: { color: "#7b8490", width: 1.3, type: "dashed" }, areaStyle: { opacity: 0 } },
+    ] }],
+  }), [selected]);
+
   return (
-    <div className="app-shell">
+    <div className="workspace">
       <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">CS</span>
-          <span>CareerSignal</span>
-        </div>
-        <nav>
-          <a className="active">
-            <BarChart3 size={18} /> Overview
-          </a>
-          <a>
-            <BriefcaseBusiness size={18} /> Role explorer
-          </a>
-          <a>
-            <GitBranch size={18} /> Skill network
-          </a>
-          <a>
-            <Target size={18} /> Roadmap
-          </a>
-          <a>
-            <Database size={18} /> Market evidence
-          </a>
+        <div className="logo"><span>CS</span><strong>CareerSignal</strong></div>
+        <nav aria-label="Main navigation">
+          <p>Workspace</p>
+          <a className="active"><LayoutDashboard size={17} />Overview</a>
+          <a><Target size={17} />Target roles</a>
+          <a><FileText size={17} />Evidence profile</a>
+          <a><BriefcaseBusiness size={17} />Job tracker</a>
+          <p>Career tools</p>
+          <a><GitBranch size={17} />Skill map</a>
+          <a><BookOpen size={17} />Development plan</a>
+          <a><BarChart3 size={17} />Market insights</a>
         </nav>
-        <div className="sidebar-meta">
-          <span>Demonstration dataset</span>
-          <strong>503 sample roles</strong>
-          <small>Not live market data</small>
-        </div>
+        <div className="sidebar-footer"><a><Settings size={17} />Settings</a><div className="profile"><CircleUserRound size={28} /><span><strong>Yang Li</strong><small>Technology candidate</small></span><MoreHorizontal size={17} /></div></div>
       </aside>
+
       <main>
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Evidence profile</p>
-            <h1>Technology career coverage</h1>
-          </div>
-          <div className="top-actions">
-            <button className="search-button">
-              <Search size={17} /> Ask the market
-            </button>
-            <button className="primary">
-              <Sparkles size={17} /> Build roadmap
-            </button>
-          </div>
+        <header className="app-header">
+          <div className="mobile-logo">CS</div>
+          <label className="global-search"><Search size={17} /><input aria-label="Search" placeholder="Search roles, skills and evidence" /></label>
+          <button className="plain-button">Import evidence</button>
+          <button className="primary-button"><Sparkles size={16} />Update profile</button>
         </header>
-        <section className="context-bar">
-          <label>
-            Target role
-            <span className="select-wrap">
-              <select
-                value={role}
-                onChange={(event) => setRole(event.target.value as RoleKey)}
-              >
-                {Object.entries(roles).map(([key, value]) => (
-                  <option key={key} value={key}>
-                    {value.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={15} />
-            </span>
-          </label>
-          <label>
-            Location{" "}
-            <button className="filter">
-              <MapPin size={15} /> Auckland
-            </button>
-          </label>
-          <label>
-            Seniority <button className="filter">Graduate / Junior</button>
-          </label>
-          <div className="sample">
-            <strong>{selected.count}</strong>
-            <span>matched demo roles</span>
-          </div>
-        </section>
-        <section className="summary-grid">
-          <article className="score-panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Current profile</p>
-                <h2>Evidence coverage</h2>
-              </div>
-              <div className="score">
-                <strong>{overall}</strong>
-                <span>/100</span>
-              </div>
-            </div>
-            <ReactECharts option={radarOption} style={{ height: 355 }} />
-            <div className="legend">
-              <span>
-                <i className="current" /> Current evidence
-              </span>
-              <span>
-                <i className="benchmark" /> Market benchmark
-              </span>
-            </div>
-          </article>
-          <article className="insight-panel">
-            <p className="eyebrow">Market interpretation</p>
-            <h2>Your fastest route forward</h2>
-            <p className="lead">
-              Your cloud pipeline gives you strong evidence in Python, AWS and
-              ETL. The largest coverage gain comes from making the
-              transformation layer testable and explicit.
-            </p>
-            {[
-              [
-                "01",
-                "Add dbt modelling to the migration pipeline",
-                "Expected role coverage gain: +11 percentage points",
-              ],
-              [
-                "02",
-                "Add automated data quality tests",
-                "Referenced by 34% of matched roles",
-              ],
-              [
-                "03",
-                "Document orchestration and recovery",
-                "Closes the highest-weight missing capability",
-              ],
-            ].map(([rank, title, detail]) => (
-              <div className="recommendation" key={rank}>
-                <span className="rank">{rank}</span>
-                <div>
-                  <strong>{title}</strong>
-                  <p>{detail}</p>
+
+        <div className="page">
+          <div className="page-title"><div><p className="kicker">Career workspace</p><h1>Good afternoon, Yang</h1><p>Track how your real work supports the roles you want.</p></div><span className="data-note">Demo market data</span></div>
+
+          <section className="target-strip">
+            <div className="target-copy"><span className="target-icon"><BriefcaseBusiness size={19} /></span><div><small>Primary target</small><select value={role} onChange={(event) => setRole(event.target.value as RoleKey)}>{Object.entries(roles).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></div></div>
+            <div className="context-item"><small>Location</small><strong><MapPin size={14} />Auckland</strong></div>
+            <div className="context-item"><small>Level</small><strong>Graduate / Junior</strong></div>
+            <div className="context-item"><small>Market sample</small><strong>{selected.count} roles</strong></div>
+            <button className="icon-button" aria-label="More target options"><MoreHorizontal size={18} /></button>
+          </section>
+
+          <div className="content-grid">
+            <div className="main-column">
+              <section className="section profile-section">
+                <div className="section-header"><div><h2>Role readiness</h2><p>Based on evidence found in your CV and projects</p></div><button className="text-button">How scoring works</button></div>
+                <div className="readiness-grid">
+                  <div className="readiness-summary"><div className="score-ring"><strong>{overall}</strong><span>/100</span></div><h3>You have a credible foundation</h3><p>Your strongest evidence is in practical data pipelines. Two missing proof areas are holding back your match.</p><div className="legend"><span><i className="you" />Your evidence</span><span><i className="benchmark" />Role benchmark</span></div></div>
+                  <ReactECharts option={radarOption} className="radar" />
                 </div>
-              </div>
-            ))}
-            <button className="text-link">
-              View the 8-week route <ExternalLink size={15} />
-            </button>
-          </article>
-        </section>
-        <section className="network-section">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Explainable scoring</p>
-              <h2>Skill evidence network</h2>
+              </section>
+
+              <section className="section skills-section">
+                <div className="section-header"><div><h2>Skills and evidence</h2><p>What employers ask for, and where you can prove it</p></div><div className="view-switch"><button className={view === "list" ? "selected" : ""} onClick={() => setView("list")}>List</button><button className={view === "network" ? "selected" : ""} onClick={() => setView("network")}>Map</button></div></div>
+                {view === "list" ? <div className="skill-list">
+                  <div className="skill-list-head"><span>Skill</span><span>Demand</span><span>Evidence</span><span>Best source</span></div>
+                  {skillRows.map((item) => <div className="skill-row" key={item.skill}><strong>{item.skill}</strong><span className="demand"><i style={{ width: `${item.demand}%` }} />{item.demand}%</span><span className={`evidence-state ${item.tone}`}>{item.tone === "strong" && <Check size={13} />}{item.level}</span><span>{item.source}</span></div>)}
+                </div> : <div className="network-canvas"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: 0.18 }} minZoom={0.35} maxZoom={1.4}><Background color="#e1e4e8" gap={24} size={1} /><Controls showInteractive={false} /></ReactFlow></div>}
+              </section>
             </div>
-            <div className="status-key">
-              <span className="strong-dot" />
-              Verified <span className="partial-dot" />
-              Partial <span className="gap-dot" />
-              Gap
-            </div>
+
+            <aside className="right-column">
+              <section className="next-step">
+                <p className="kicker">Recommended next step</p><h2>Make your pipeline production-ready</h2><p>Add a dbt transformation layer and automated data-quality checks to your migration project.</p>
+                <div className="impact"><span>Potential coverage</span><strong>73 <ArrowRight size={15} /> 84</strong></div>
+                <button className="primary-button wide">View 8-week plan <ArrowRight size={16} /></button>
+              </section>
+              <section className="priorities">
+                <div className="section-header"><div><h2>Priority gaps</h2><p>Ranked by market value</p></div></div>
+                <ol>
+                  <li><span>1</span><div><strong>dbt modelling</strong><p>Referenced in 29% of sampled roles</p></div></li>
+                  <li><span>2</span><div><strong>Automated data tests</strong><p>Strengthens existing pipeline evidence</p></div></li>
+                  <li><span>3</span><div><strong>Workflow orchestration</strong><p>No current implementation evidence</p></div></li>
+                </ol>
+              </section>
+              <section className="activity">
+                <div className="section-header"><div><h2>Evidence activity</h2></div><button className="text-button">View all</button></div>
+                <div><span className="activity-mark"><GitBranch size={15} /></span><p><strong>AWS Pipeline</strong> supports 4 target skills<small>Reviewed today</small></p></div>
+                <div><span className="activity-mark"><FileText size={15} /></span><p><strong>CV profile</strong> has 2 claims without proof<small>Reviewed 2 days ago</small></p></div>
+              </section>
+            </aside>
           </div>
-          <div className="network-canvas">
-            <ReactFlow
-              nodes={skillNodes}
-              edges={skillEdges}
-              nodeTypes={nodeTypes}
-              fitView
-              fitViewOptions={{ padding: 0.18 }}
-              minZoom={0.35}
-              maxZoom={1.4}
-            >
-              <Background color="#d9dfdc" gap={22} size={1} />
-              <Controls showInteractive={false} />
-            </ReactFlow>
-          </div>
-        </section>
-        <section className="evidence-section">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Score detail</p>
-              <h2>Evidence contribution</h2>
-            </div>
-            <button className="filter">
-              All dimensions <ChevronDown size={14} />
-            </button>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Skill</th>
-                  <th>Market demand</th>
-                  <th>Evidence state</th>
-                  <th>Score</th>
-                  <th>Strongest source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {evidenceRows.map((row) => (
-                  <tr key={row.skill}>
-                    <td>
-                      <strong>{row.skill}</strong>
-                    </td>
-                    <td>{row.demand}</td>
-                    <td>
-                      <span className={`pill ${row.level.toLowerCase()}`}>
-                        {row.level}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="score-bar">
-                        <span style={{ width: `${row.score}%` }} />
-                        <b>{row.score}</b>
-                      </div>
-                    </td>
-                    <td>{row.source}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="method-note">
-            Scores measure documented evidence against the selected role market.
-            They do not claim to measure absolute ability.
-          </p>
-        </section>
+          <p className="method-note">CareerSignal measures documented evidence against a selected market. It does not claim to measure your absolute ability.</p>
+        </div>
       </main>
     </div>
   );
