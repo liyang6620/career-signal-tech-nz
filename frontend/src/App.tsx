@@ -47,13 +47,26 @@ type EvidenceResult = { citation_id: string; title: string; company: string; loc
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string, user: SessionUser) => void }) {
   const resetToken = new URLSearchParams(window.location.search).get("reset");
-  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">(resetToken ? "reset" : "register");
+  const verifyToken = new URLSearchParams(window.location.search).get("verify");
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">(resetToken || verifyToken ? "login" : "register");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!verifyToken) return;
+    fetch(`${API_URL}/api/v1/auth/verify-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: verifyToken }),
+    }).then((response) => {
+      window.history.replaceState({}, "", window.location.pathname);
+      setMessage(response.ok ? "Email verified. You can now sign in." : "This verification link is invalid or expired.");
+    }).catch(() => setMessage("Could not verify this email link."));
+  }, [verifyToken]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
