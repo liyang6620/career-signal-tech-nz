@@ -491,3 +491,19 @@ def test_evidence_search_returns_source_citations(client: TestClient, monkeypatc
     assert response.status_code == 200
     assert response.json()["citations"][0]["citation_id"]
     assert response.json()["citations"][0]["source_url"] == "https://jobs.example.com/1"
+
+
+def test_retrieval_quality_is_explicit_when_no_feedback_exists(client: TestClient) -> None:
+    auth = register(client, email="quality@example.com")
+    response = client.get(
+        "/api/v1/rag/judgements/quality",
+        headers={"Authorization": f"Bearer {auth['access_token']}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "labelled_count": 0,
+        "relevant_count": 0,
+        "relevance_rate": None,
+        "relevant_mean_rank": None,
+        "by_role_family": [],
+    }

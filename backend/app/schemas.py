@@ -416,3 +416,11 @@ class RetrievalJudgementResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class RetrievalQualityResponse(BaseModel):
+    labelled_count: int
+    relevant_count: int
+    relevance_rate: float | None
+    relevant_mean_rank: float | None
+    by_role_family: list[dict[str, str | int | float | None]]

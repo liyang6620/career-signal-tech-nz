@@ -81,6 +81,7 @@ from .schemas import (
     ResetPasswordRequest,
     RetrievalJudgementRequest,
     RetrievalJudgementResponse,
+    RetrievalQualityResponse,
     RoleDecodeRequest,
     RoleDecodeResponse,
     RoleFamily,
@@ -703,6 +704,39 @@ def create_retrieval_judgement(
     db.commit()
     db.refresh(judgement)
     return judgement
+
+
+@app.get("/api/v1/rag/judgements/quality", response_model=RetrievalQualityResponse)
+def retrieval_judgement_quality(
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> RetrievalQualityResponse:
+    judgements = list(
+        db.scalars(
+            select(RetrievalJudgement)
+            .where(RetrievalJudgement.user_id == user.id)
+            .order_by(RetrievalJudgement.created_at.desc())
+        )
+    )
+    relevant = [item for item in judgements if item.relevant]
+    grouped: dict[str, list[RetrievalJudgement]] = {}
+    for item in judgements:
+        grouped.setdefault(item.role_family or "unfiltered", []).append(item)
+    return RetrievalQualityResponse(
+        labelled_count=len(judgements),
+        relevant_count=len(relevant),
+        relevance_rate=round(len(relevant) / len(judgements), 4) if judgements else None,
+        relevant_mean_rank=round(sum(item.result_rank for item in relevant) / len(relevant), 2) if relevant else None,
+        by_role_family=[
+            {
+                "role_family": role,
+                "labelled_count": len(items),
+                "relevant_count": sum(item.relevant for item in items),
+                "relevance_rate": round(sum(item.relevant for item in items) / len(items), 4),
+            }
+            for role, items in sorted(grouped.items())
+        ],
+    )
 
 
 @app.post("/api/v1/rag/evaluate", response_model=RagEvaluationResponse)
