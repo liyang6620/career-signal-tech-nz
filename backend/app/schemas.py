@@ -198,6 +198,14 @@ class RoleFitResponse(BaseModel):
 class GithubProjectRequest(BaseModel):
     url: HttpUrl
 
+class GithubRepositoryCandidateResponse(BaseModel):
+    name: str
+    url: HttpUrl
+    description: str | None
+    language: str | None
+    stars: int
+    updated_at: str | None
+
 
 class GithubSuggestionResponse(BaseModel):
     id: UUID

@@ -203,6 +203,13 @@ select {
 .product-shell .setup-header h1 { font-size: 32px; }
 .product-shell .primary-button, .product-shell .secondary-button, .product-shell .text-button, .product-shell .manual-source, .product-shell .upload-button { font-size: 14px; }
 .product-shell .field > span, .product-shell .input-control input, .product-shell .select-control select, .product-shell .url-control input { font-size: 14px; }
+.github-candidates { margin-top: 12px; padding: 14px; border: 1px solid #dfe4e1; background: #fbfdfc; }
+.github-candidates > div { display:flex; justify-content:space-between; margin-bottom:10px; color:#283039; font-size:14px; }
+.github-candidates > div span { color:#1f6348; font-size:13px; }
+.github-candidates label { display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-top:1px solid #edf0ef; }
+.github-candidates label span, .github-candidates small { display:block; }
+.github-candidates label b { font-size:14px; color:#283039; }
+.github-candidates small { margin-top:3px; color:#707983; font-size:13px; }
 @media (max-width: 700px) { .product-shell .source-row { grid-template-columns: 38px 1fr; } .product-shell .source-row .url-control { grid-column: 2; width: 100%; } .product-shell .setup-header h1 { font-size: 27px; } }
 .product-shell {
   display: grid;

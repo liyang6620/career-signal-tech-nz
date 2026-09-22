@@ -40,6 +40,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 type SessionUser = { id: string; email: string; display_name: string; is_verified: boolean };
 type EvidenceSuggestion = { id: string; canonical_skill: string; category: string; excerpt: string; locator: string; confidence: number; proposed_level: number; review_status: string };
 type GithubProject = { id: string; repository: string; status: string; suggestions: EvidenceSuggestion[] };
+type GithubCandidate = { name: string; url: string; description: string | null; language: string | null; stars: number; updated_at: string | null };
 type FitContribution = { skill_slug: string; skill_name: string; weight: number; required: boolean; evidence_level: number; normalized_score: number; weighted_score: number };
 type RoleFit = { role_family: string; score: number; coverage: number; evidence_depth: number; cap_applied: boolean; contributions: FitContribution[] };
 type ProductView = "workspace" | "market" | "decoder" | "evidence";
@@ -150,6 +151,8 @@ export default function App() {
   const [confirmedSuggestions, setConfirmedSuggestions] = useState<Set<string>>(new Set());
   const [github, setGithub] = useState("");
   const [githubProjects, setGithubProjects] = useState<GithubProject[]>([]);
+  const [githubCandidates, setGithubCandidates] = useState<GithubCandidate[]>([]);
+  const [selectedGithubUrls, setSelectedGithubUrls] = useState<Set<string>>(new Set());
   const [confirmedGithub, setConfirmedGithub] = useState<Set<string>>(new Set());
   const [portfolio, setPortfolio] = useState("");
   const [error, setError] = useState("");
@@ -371,6 +374,19 @@ export default function App() {
       setError("Add at least one evidence source, or skip this step and add evidence manually later.");
       return;
     }
+    if (/^https?:\/\/github\.com\/[^/]+\/?$/.test(github.trim()) && githubCandidates.length === 0) {
+      const response = await fetch(`${API_URL}/api/v1/evidence/github/profile?url=${encodeURIComponent(github.trim())}`, { headers: { Authorization: `Bearer ${token}` } });
+      const candidates = await response.json();
+      if (!response.ok) { setError(candidates.detail ?? "Could not load GitHub repositories"); return; }
+      setGithubCandidates(candidates);
+      setSelectedGithubUrls(new Set(candidates.slice(0, 6).map((item: GithubCandidate) => item.url)));
+      setError("Select the public repositories you want to use, then click Review evidence again.");
+      return;
+    }
+    if (githubCandidates.length > 0) {
+      if (!selectedGithubUrls.size) { setError("Select at least one GitHub repository."); return; }
+      setGithub(Array.from(selectedGithubUrls).join(", "));
+    }
     if (github.trim() && githubProjects.length === 0) {
       const urls = github.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
       const projects: GithubProject[] = [];
@@ -442,7 +458,8 @@ export default function App() {
               <div className="panel-title"><span className="panel-icon"><FileText size={20} /></span><div><h2>Add evidence of your work</h2><p>Use one or more sources. You will review extracted evidence before it affects your profile.</p></div></div>
               <div className="source-list">
                 <div className={`source-row ${cv ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cv ? `${cv.name} · ${cvStatus.replaceAll("_", " ")}` : "PDF or DOCX, up to 10 MB"}</p></div>{cv ? <button className="icon-action" aria-label="Remove CV" onClick={removeCv}><X size={17} /></button> : <label className="upload-button"><UploadCloud size={15} />Choose file<input type="file" accept=".pdf,.docx" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCv(file); }} /></label>}</div>
-                <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub projects</strong><p>One or more public repositories, separated by commas</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://github.com/user/repository" value={github} onChange={(event) => { setGithub(event.target.value); setGithubProjects([]); }} /></div></label>
+                <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub projects</strong><p>Use a profile URL to choose from all public repositories</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://github.com/username" value={github} onChange={(event) => { setGithub(event.target.value); setGithubProjects([]); setGithubCandidates([]); }} /></div></label>
+                {githubCandidates.length > 0 && <div className="github-candidates"><div><strong>Select projects to analyse</strong><span>{selectedGithubUrls.size} selected</span></div>{githubCandidates.map((candidate) => <label key={candidate.url}><input type="checkbox" checked={selectedGithubUrls.has(candidate.url)} onChange={() => setSelectedGithubUrls((current) => { const next = new Set(current); if (next.has(candidate.url)) next.delete(candidate.url); else next.add(candidate.url); return next; })} /><span><b>{candidate.name}</b><small>{candidate.language ?? "Repository"} · {candidate.stars} stars</small></span></label>)}</div>}
                 <label className="source-row"><span className="source-icon"><Link2 size={19} /></span><div><strong>Portfolio or project</strong><p>Optional public URL</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://" value={portfolio} onChange={(event) => setPortfolio(event.target.value)} /></div></label>
                 <button className="manual-source"><Plus size={16} />Add evidence manually</button>
               </div>

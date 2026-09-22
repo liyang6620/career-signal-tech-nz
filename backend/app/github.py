@@ -20,6 +20,15 @@ class GithubSnapshot:
     topics: list[str]
     readme: str
 
+@dataclass(frozen=True)
+class GithubRepositoryCandidate:
+    name: str
+    url: str
+    description: str | None
+    language: str | None
+    stars: int
+    updated_at: str | None
+
 
 def parse_repo_url(value: str) -> tuple[str, str]:
     profile_match = re.fullmatch(r"https?://github\.com/([^/]+)/?", value.strip())
@@ -40,6 +49,21 @@ def _get_json(url: str) -> dict:
             return json.load(response)
     except (HTTPError, URLError, TimeoutError) as exc:
         raise ValueError("GitHub repository could not be fetched") from exc
+
+def list_public_repositories(profile_url: str) -> list[GithubRepositoryCandidate]:
+    match = re.fullmatch(r"https?://github\.com/([^/]+)/?", profile_url.strip())
+    if not match:
+        raise ValueError("Use a GitHub profile URL such as https://github.com/username")
+    values = _get_json(f"https://api.github.com/users/{match.group(1)}/repos?per_page=100&sort=updated&type=owner")
+    if not isinstance(values, list):
+        raise ValueError("GitHub profile repositories could not be loaded")
+    return [
+        GithubRepositoryCandidate(
+            name=item["name"], url=item["html_url"], description=item.get("description"),
+            language=item.get("language"), stars=int(item.get("stargazers_count", 0)), updated_at=item.get("updated_at"),
+        )
+        for item in values if not item.get("fork") and not item.get("archived")
+    ]
 
 
 def fetch_snapshot(url: str) -> GithubSnapshot:

@@ -26,7 +26,7 @@ from .auth import (
 from .collectors import collect, is_new_zealand_location
 from .config import get_settings
 from .database import get_db
-from .github import fetch_snapshot, suggest_github_evidence
+from .github import fetch_snapshot, list_public_repositories, suggest_github_evidence
 from .mailer import send_email
 from .models import (
     CandidateSkillEvidence,
@@ -72,6 +72,7 @@ from .schemas import (
     ExtractionResponse,
     GithubProjectRequest,
     GithubProjectResponse,
+    GithubRepositoryCandidateResponse,
     JobPostingInput,
     LoginRequest,
     MarketImportRequest,
@@ -1055,6 +1056,14 @@ def evidence_graph(
             for item in items
         ],
     )
+
+
+@app.get("/api/v1/evidence/github/profile", response_model=list[GithubRepositoryCandidateResponse])
+def list_github_profile_repositories(url: str, user: Annotated[User, Depends(verified_user)]) -> list[GithubRepositoryCandidateResponse]:
+    try:
+        return [GithubRepositoryCandidateResponse.model_validate(item.__dict__) for item in list_public_repositories(url)]
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
 @app.post("/api/v1/evidence/github", response_model=GithubProjectResponse, status_code=status.HTTP_201_CREATED)
