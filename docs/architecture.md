@@ -39,8 +39,16 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
 - Completion verifies the stored size, content type and signed expected-size metadata before a job is accepted.
 - A durable PostgreSQL queue is claimed with `FOR UPDATE SKIP LOCKED`, allowing multiple workers without duplicate processing; expired processing leases are reclaimed after worker failure.
 - The worker validates PDF/DOCX signatures and streams each object through ClamAV. Rejected or infected objects are deleted.
-- Only objects in the `clean` state may enter future parsing, embedding and evidence-extraction stages.
+- Only security-cleared objects are queued for parsing; rejected objects never enter evidence extraction.
 - Local development uses private MinIO storage. The same storage boundary supports managed S3-compatible services in deployment.
+
+## Evidence extraction and review
+
+- Clean PDF and DOCX files are parsed locally in the worker; no document content is sent to an external model.
+- The database retains the parser version, a SHA-256 text fingerprint, document metrics and short source excerpts, not a second full-text CV copy.
+- Versioned deterministic aliases generate initial skill suggestions with a source locator, confidence and conservative evidence level.
+- Suggestions remain `pending` until the document owner explicitly confirms or rejects every item.
+- Confirmed suggestions are reviewable evidence inputs, not claims of mastery. OCR and semantic inference remain future stages.
 
 ## Scoring
 
@@ -63,4 +71,4 @@ PostgreSQL is the system of record and pgvector supports semantic retrieval. Loc
 
 ## Production evolution
 
-The API now exposes the scoring contract, identity lifecycle, persisted career profiles and private document-ingestion boundary. Next increments add CV parsing, user-reviewed evidence extraction, compliant market ingestion, deduplication, skill-taxonomy versioning, retrieval evaluation, observability, backup policies and deployment manifests.
+The API now exposes the scoring contract, identity lifecycle, persisted career profiles, private document ingestion and user-reviewed CV evidence extraction. Next increments add the canonical skill taxonomy, confirmed-evidence scoring integration, GitHub extraction, compliant market ingestion, deduplication, retrieval evaluation, observability, backup policies and deployment manifests.

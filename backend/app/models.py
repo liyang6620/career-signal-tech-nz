@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -130,3 +130,36 @@ class ProcessingJob(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class DocumentExtraction(Base):
+    __tablename__ = "document_extractions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    upload_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("evidence_uploads.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    parser_version: Mapped[str] = mapped_column(String(40))
+    text_sha256: Mapped[str] = mapped_column(String(64))
+    character_count: Mapped[int] = mapped_column(Integer)
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EvidenceSuggestion(Base):
+    __tablename__ = "evidence_suggestions"
+    __table_args__ = (UniqueConstraint("extraction_id", "canonical_skill"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    extraction_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("document_extractions.id", ondelete="CASCADE"), index=True
+    )
+    canonical_skill: Mapped[str] = mapped_column(String(100), index=True)
+    category: Mapped[str] = mapped_column(String(60))
+    excerpt: Mapped[str] = mapped_column(Text)
+    locator: Mapped[str] = mapped_column(String(80))
+    confidence: Mapped[float] = mapped_column(Float)
+    proposed_level: Mapped[int] = mapped_column(Integer)
+    review_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

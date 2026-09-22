@@ -40,7 +40,7 @@ The [product scope](docs/product-scope.md) defines users, module boundaries, the
 
 ## Product surfaces
 
-The default frontend is a new-user profile setup flow, not a pre-filled personal dashboard. It collects the target role, location and seniority, supports private PDF/DOCX CV upload, accepts optional GitHub and portfolio sources, and asks the user to review the analysis scope. Uploaded CVs remain unavailable to downstream analysis until their type, size, signature and malware scan have passed. Profile persistence is implemented; document parsing and evidence extraction are not yet presented as working features.
+The default frontend is a new-user profile setup flow, not a pre-filled personal dashboard. It collects the target role, location and seniority, supports private PDF/DOCX CV upload, accepts optional GitHub and portfolio sources, and asks the user to review the analysis scope. Uploaded CVs remain unavailable to parsing until their type, size, signature and malware scan have passed. Text-based CVs are then parsed locally into traceable skill suggestions that the user must confirm or reject before they can affect the profile.
 
 ## Explainable scoring
 
@@ -61,6 +61,7 @@ Missing required skills cap a dimension score. The API returns all contributions
 - API: Python 3.12, FastAPI, Pydantic
 - Persistence/auth: SQLAlchemy, Alembic, Argon2, short-lived JWT access tokens and rotated refresh sessions
 - Private files: S3-compatible object storage, presigned direct uploads, ClamAV, durable PostgreSQL work queue
+- Document evidence: local PDF/DOCX parsing, versioned deterministic skill matching, user-confirmed evidence review
 - Data/RAG: PostgreSQL 16 + pgvector; local embeddings by default
 - Analytics/ingestion (planned): DuckDB, Parquet, Python collectors and APScheduler
 - AI: optional OpenAI Responses API with Structured Outputs and cited context
@@ -120,7 +121,7 @@ Planned ingestion uses public company career pages, permitted Greenhouse/Lever e
 
 1. Versioned job, skill, source, and candidate-evidence schema with migrations.
 2. Compliant job ingestion, deduplication, freshness monitoring, and data-quality reports.
-3. CV parsing and GitHub evidence extraction with user confirmation and provenance.
+3. OCR and GitHub evidence extraction with user confirmation and provenance.
 4. pgvector retrieval with locally generated embeddings and citation evaluation.
 5. OpenAI explanation layer with typed outputs, cost budgets, and regression evals.
 6. Telemetry, backups, restore drills, and deployment runbooks.
@@ -128,7 +129,7 @@ Planned ingestion uses public company career pages, permitted Greenhouse/Lever e
 
 ## Production-readiness status
 
-The repository currently provides a tested foundation rather than claiming production operation. Authentication, email verification, password reset, persistent abuse controls, security audit events, revocable sessions, user-scoped profile persistence, account export/deletion, private S3-compatible CV storage, signed direct uploads, malware scanning, a durable PostgreSQL job queue, and database migrations are implemented. CV parsing, embeddings and evidence extraction are deliberately downstream of the clean-file state and are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, database and object-store backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
+The repository currently provides a tested foundation rather than claiming production operation. Authentication, email verification, password reset, persistent abuse controls, security audit events, revocable sessions, user-scoped profile persistence, account export/deletion, private S3-compatible CV storage, signed direct uploads, malware scanning, a durable PostgreSQL job queue, local PDF/DOCX parsing and user-reviewed skill suggestions are implemented. The parser stores a document fingerprint and short evidence excerpts rather than a second full-text CV copy. OCR, embeddings, semantic evidence inference and GitHub extraction are not implemented yet. Before public user data or live market claims, the platform still requires managed secrets, backup/restore drills, operational monitoring, ingestion reliability targets, accessibility testing, retrieval/scoring evaluation, and a deployment runbook.
 
 ## License
 

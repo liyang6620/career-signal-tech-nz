@@ -624,6 +624,52 @@ select {
   height: 32px;
   color: #69727c;
 }
+.evidence-review {
+  margin-top: 18px;
+  border-top: 1px solid #e2e5e7;
+}
+.evidence-review-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0 10px;
+  color: #283039;
+  font-size: 12px;
+}
+.evidence-review-heading span {
+  color: #69727c;
+}
+.evidence-item {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #edf0f1;
+  cursor: pointer;
+}
+.evidence-item input {
+  margin-top: 3px;
+  accent-color: #1f5c45;
+}
+.evidence-item span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.evidence-item b {
+  color: #283039;
+  font-size: 12px;
+}
+.evidence-item small {
+  color: #69727c;
+  font-size: 10px;
+}
+.evidence-item q {
+  color: #4b535c;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 720px) {
   .product-shell {
     grid-template-columns: 1fr;

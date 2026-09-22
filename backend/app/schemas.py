@@ -123,6 +123,43 @@ class UploadResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EvidenceSuggestionResponse(BaseModel):
+    id: UUID
+    canonical_skill: str
+    category: str
+    excerpt: str
+    locator: str
+    confidence: float
+    proposed_level: int
+    review_status: str
+
+    model_config = {"from_attributes": True}
+
+
+class ExtractionResponse(BaseModel):
+    upload_id: UUID
+    parser_version: str
+    character_count: int
+    page_count: int | None
+    suggestions: list[EvidenceSuggestionResponse]
+
+
+class EvidenceDecision(BaseModel):
+    suggestion_id: UUID
+    decision: Literal["confirmed", "rejected"]
+
+
+class EvidenceReviewRequest(BaseModel):
+    decisions: list[EvidenceDecision] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def unique_suggestions(self) -> "EvidenceReviewRequest":
+        ids = [decision.suggestion_id for decision in self.decisions]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Each suggestion must have exactly one decision")
+        return self
+
+
 class EvidenceSourceInput(BaseModel):
     source_type: Literal["github", "portfolio"]
     source_reference: HttpUrl

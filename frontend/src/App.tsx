@@ -25,18 +25,19 @@ import {
 import "./App.css";
 
 type Step = 1 | 2 | 3;
-type RoleKey = "" | "software" | "data-analyst" | "data-engineer" | "ai" | "cloud";
+type RoleKey = "" | "software" | "data-analyst" | "data-engineer" | "ai" | "cloud-devops";
 
 const roles: Record<Exclude<RoleKey, "">, string> = {
   software: "Software Engineer",
   "data-analyst": "Data & BI Analyst",
   "data-engineer": "Data Engineer / Analytics Engineer",
   ai: "AI Application Engineer",
-  cloud: "Cloud / DevOps Engineer",
+  "cloud-devops": "Cloud / DevOps Engineer",
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 type SessionUser = { id: string; email: string; display_name: string; is_verified: boolean };
+type EvidenceSuggestion = { id: string; canonical_skill: string; category: string; excerpt: string; locator: string; confidence: number; proposed_level: number; review_status: string };
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string, user: SessionUser) => void }) {
   const resetToken = new URLSearchParams(window.location.search).get("reset");
@@ -121,6 +122,8 @@ export default function App() {
   const [cv, setCv] = useState<File | null>(null);
   const [cvUploadId, setCvUploadId] = useState<string | null>(null);
   const [cvStatus, setCvStatus] = useState<string>("");
+  const [suggestions, setSuggestions] = useState<EvidenceSuggestion[]>([]);
+  const [confirmedSuggestions, setConfirmedSuggestions] = useState<Set<string>>(new Set());
   const [github, setGithub] = useState("");
   const [portfolio, setPortfolio] = useState("");
   const [error, setError] = useState("");
@@ -135,7 +138,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!token || !cvUploadId || !["queued_for_scan", "scanning"].includes(cvStatus)) return;
+    if (!token || !cvUploadId || !["queued_for_scan", "scanning", "queued_for_parsing", "parsing"].includes(cvStatus)) return;
     const timer = window.setInterval(async () => {
       const response = await fetch(`${API_URL}/api/v1/evidence/uploads`, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) return;
@@ -144,6 +147,17 @@ export default function App() {
       if (current) setCvStatus(current.status);
     }, 2000);
     return () => window.clearInterval(timer);
+  }, [token, cvUploadId, cvStatus]);
+
+  useEffect(() => {
+    if (!token || !cvUploadId || cvStatus !== "awaiting_review") return;
+    fetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}/extraction`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (response) => response.ok ? response.json() : Promise.reject())
+      .then((data) => {
+        setSuggestions(data.suggestions);
+        setConfirmedSuggestions(new Set(data.suggestions.map((item: EvidenceSuggestion) => item.id)));
+      })
+      .catch(() => setError("The CV was parsed, but its evidence could not be loaded."));
   }, [token, cvUploadId, cvStatus]);
 
   async function uploadCv(file: File) {
@@ -174,11 +188,23 @@ export default function App() {
     setCv(null);
     setCvUploadId(null);
     setCvStatus("");
+    setSuggestions([]);
+    setConfirmedSuggestions(new Set());
   }
 
   async function saveProfile() {
     if (!token || !role) return;
     setError("");
+    if (cvUploadId && cvStatus === "awaiting_review") {
+      const review = await fetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ decisions: suggestions.map((item) => ({ suggestion_id: item.id, decision: confirmedSuggestions.has(item.id) ? "confirmed" : "rejected" })) }),
+      });
+      const reviewed = await review.json();
+      if (!review.ok) { setError(reviewed.detail ?? "Could not save the evidence review"); return; }
+      setCvStatus(reviewed.status);
+    }
     const evidence_sources = [
       ...(github.trim() ? [{ source_type: "github", source_reference: github.startsWith("http") ? github : `https://${github}` }] : []),
       ...(portfolio.trim() ? [{ source_type: "portfolio", source_reference: portfolio.startsWith("http") ? portfolio : `https://${portfolio}` }] : []),
@@ -210,8 +236,8 @@ export default function App() {
   }
 
   function continueFromEvidence() {
-    if (cvUploadId && ["uploading", "failed", "rejected", "scan_failed"].includes(cvStatus)) {
-      setError("Resolve the CV upload problem before continuing, or remove the file.");
+    if (cvUploadId && ["uploading", "queued_for_scan", "scanning", "queued_for_parsing", "parsing", "failed", "rejected", "scan_failed", "parse_failed"].includes(cvStatus)) {
+      setError("Wait for CV processing to finish, resolve the problem, or remove the file.");
       return;
     }
     if (!cvUploadId && !github.trim() && !portfolio.trim()) {
@@ -290,6 +316,7 @@ export default function App() {
               </dl>
               <div className="consent"><label><input type="checkbox" defaultChecked /><span>I understand that generated findings must be reviewed before I use them in an application.</span></label></div>
               <div className="not-live"><strong>Evidence processing</strong><p>CVs are stored privately and must pass file-signature and malware checks before extraction. Evidence extraction begins only after a clean result.</p></div>
+              {suggestions.length > 0 && <div className="evidence-review"><div className="evidence-review-heading"><strong>Review extracted evidence</strong><span>{confirmedSuggestions.size} of {suggestions.length} selected</span></div>{suggestions.map((item) => <label className="evidence-item" key={item.id}><input type="checkbox" checked={confirmedSuggestions.has(item.id)} onChange={() => setConfirmedSuggestions((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} /><span><b>{item.canonical_skill}</b><small>{item.category} · proposed level {item.proposed_level}/5 · {Math.round(item.confidence * 100)}% match</small><q>{item.excerpt}</q></span></label>)}</div>}
             </>}
 
             {error && <p className="form-error" role="alert">{error}</p>}

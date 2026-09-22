@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -6,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
+from app.models import DocumentExtraction, EvidenceSuggestion, EvidenceUpload
 
 
 @pytest.fixture
@@ -33,6 +36,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("app.main.new_refresh_token", deterministic_token)
     with TestClient(app) as test_client:
         test_client.issued_tokens = issued_tokens  # type: ignore[attr-defined]
+        test_client.testing_session = testing_session  # type: ignore[attr-defined]
         yield test_client
     app.dependency_overrides.clear()
     Base.metadata.drop_all(engine)
@@ -242,3 +246,90 @@ def test_upload_rejects_mismatched_extension_and_oversized_file(
         json={"filename": "candidate.pdf", "content_type": "application/pdf", "size": 20 * 1024 * 1024},
     )
     assert oversized.status_code == 413
+
+
+def test_extracted_evidence_requires_owner_and_complete_review(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.main.ensure_bucket", lambda: None)
+    monkeypatch.setattr("app.main.presigned_put", lambda key, content_type, size: "http://storage.test/signed")
+    deleted_keys: list[str] = []
+    monkeypatch.setattr("app.main.delete_object", deleted_keys.append)
+    owner = register(client, "owner@example.com")
+    headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    initiated = client.post(
+        "/api/v1/evidence/uploads",
+        headers=headers,
+        json={"filename": "candidate.pdf", "content_type": "application/pdf", "size": 128},
+    )
+    upload_id = initiated.json()["id"]
+    with client.testing_session() as session:  # type: ignore[attr-defined]
+        upload = session.get(EvidenceUpload, UUID(upload_id))
+        upload.status = "awaiting_review"
+        extraction = DocumentExtraction(
+            upload_id=upload.id,
+            parser_version="test-v1",
+            text_sha256="a" * 64,
+            character_count=100,
+            page_count=1,
+        )
+        session.add(extraction)
+        session.flush()
+        session.add_all(
+            [
+                EvidenceSuggestion(
+                    extraction_id=extraction.id,
+                    canonical_skill="Python",
+                    category="Programming",
+                    excerpt="Built a Python service",
+                    locator="line 1",
+                    confidence=0.9,
+                    proposed_level=3,
+                ),
+                EvidenceSuggestion(
+                    extraction_id=extraction.id,
+                    canonical_skill="SQL",
+                    category="Data",
+                    excerpt="Used SQL for reporting",
+                    locator="line 2",
+                    confidence=0.75,
+                    proposed_level=2,
+                ),
+            ]
+        )
+        session.commit()
+
+    extraction_response = client.get(f"/api/v1/evidence/uploads/{upload_id}/extraction", headers=headers)
+    assert extraction_response.status_code == 200
+    suggestions = extraction_response.json()["suggestions"]
+    incomplete = client.post(
+        f"/api/v1/evidence/uploads/{upload_id}/review",
+        headers=headers,
+        json={"decisions": [{"suggestion_id": suggestions[0]["id"], "decision": "confirmed"}]},
+    )
+    assert incomplete.status_code == 422
+
+    outsider = register(client, "outsider@example.com")
+    outsider_headers = {"Authorization": f"Bearer {outsider['access_token']}"}
+    assert client.get(f"/api/v1/evidence/uploads/{upload_id}/extraction", headers=outsider_headers).status_code == 404
+
+    reviewed = client.post(
+        f"/api/v1/evidence/uploads/{upload_id}/review",
+        headers=headers,
+        json={
+            "decisions": [
+                {"suggestion_id": suggestion["id"], "decision": "confirmed" if index == 0 else "rejected"}
+                for index, suggestion in enumerate(suggestions)
+            ]
+        },
+    )
+    assert reviewed.status_code == 200
+    assert reviewed.json()["status"] == "reviewed"
+    deleted = client.request(
+        "DELETE",
+        "/api/v1/account",
+        headers=headers,
+        json={"password": "a-secure-password"},
+    )
+    assert deleted.status_code == 204
+    assert len(deleted_keys) == 1

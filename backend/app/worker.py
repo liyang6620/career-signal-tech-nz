@@ -8,7 +8,8 @@ from sqlalchemy import and_, or_, select
 
 from .config import get_settings
 from .database import SessionLocal
-from .models import EvidenceUpload, ProcessingJob
+from .extraction import PARSER_VERSION, parse_document, suggest_evidence
+from .models import DocumentExtraction, EvidenceSuggestion, EvidenceUpload, ProcessingJob
 from .storage import delete_object, download_object, ensure_bucket
 
 logging.basicConfig(level=logging.INFO)
@@ -50,8 +51,11 @@ def claim_job() -> ProcessingJob | None:
             job.last_error = "Processing lease expired after maximum attempts"
             upload = db.get(EvidenceUpload, job.upload_id)
             if upload is not None:
-                upload.status = "scan_failed"
-                upload.failure_reason = "File security scan failed"
+                is_parse = job.job_type == "document_parse"
+                upload.status = "parse_failed" if is_parse else "scan_failed"
+                upload.failure_reason = (
+                    "Document text could not be extracted" if is_parse else "File security scan failed"
+                )
             db.commit()
             return None
         job.status = "processing"
@@ -91,8 +95,9 @@ def process_scan(job: ProcessingJob) -> None:
                 upload.status = "rejected"
                 upload.failure_reason = f"Malware detected: {signature}"[:255]
             elif verdict == "OK":
-                upload.status = "clean"
+                upload.status = "queued_for_parsing"
                 upload.failure_reason = None
+                db.add(ProcessingJob(upload_id=upload.id, job_type="document_parse"))
             else:
                 raise RuntimeError(f"Unexpected scanner verdict: {verdict}")
             persisted_job.status = "completed"
@@ -110,6 +115,59 @@ def process_scan(job: ProcessingJob) -> None:
             db.commit()
 
 
+def process_parse(job: ProcessingJob) -> None:
+    with SessionLocal() as db:
+        persisted_job = db.get(ProcessingJob, job.id)
+        upload = db.get(EvidenceUpload, job.upload_id)
+        if persisted_job is None or upload is None:
+            return
+        try:
+            upload.status = "parsing"
+            db.commit()
+            suffix = ".pdf" if upload.content_type == "application/pdf" else ".docx"
+            with tempfile.NamedTemporaryFile(suffix=suffix) as file_object:
+                download_object(upload.storage_key, file_object)
+                file_object.flush()
+                parsed = parse_document(file_object.name, upload.content_type)
+            extraction = DocumentExtraction(
+                upload_id=upload.id,
+                parser_version=PARSER_VERSION,
+                text_sha256=parsed.text_sha256,
+                character_count=parsed.character_count,
+                page_count=parsed.page_count,
+            )
+            db.add(extraction)
+            db.flush()
+            suggestions = suggest_evidence(parsed.text)
+            db.add_all(
+                EvidenceSuggestion(
+                    extraction_id=extraction.id,
+                    canonical_skill=item.skill,
+                    category=item.category,
+                    excerpt=item.excerpt,
+                    locator=item.locator,
+                    confidence=item.confidence,
+                    proposed_level=item.proposed_level,
+                )
+                for item in suggestions
+            )
+            upload.status = "awaiting_review" if suggestions else "parsed_no_evidence"
+            upload.failure_reason = None
+            persisted_job.status = "completed"
+            db.commit()
+        except Exception as exc:
+            logger.exception("Document parsing failed for job %s", job.id)
+            persisted_job.last_error = str(exc)[:2000]
+            if persisted_job.attempts >= MAX_ATTEMPTS:
+                persisted_job.status = "failed"
+                upload.status = "parse_failed"
+                upload.failure_reason = "Document text could not be extracted"
+            else:
+                persisted_job.status = "queued"
+                persisted_job.available_at = datetime.now(UTC) + timedelta(seconds=30 * persisted_job.attempts)
+            db.commit()
+
+
 def run() -> None:
     ensure_bucket()
     logger.info("Evidence worker started")
@@ -120,6 +178,10 @@ def run() -> None:
             continue
         if job.job_type == "virus_scan":
             process_scan(job)
+        elif job.job_type == "document_parse":
+            process_parse(job)
+        else:
+            logger.error("Unsupported processing job type %s", job.job_type)
 
 
 if __name__ == "__main__":

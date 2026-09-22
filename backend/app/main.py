@@ -23,7 +23,9 @@ from .mailer import send_email
 from .models import (
     CareerProfile,
     CareerTarget,
+    DocumentExtraction,
     EvidenceSource,
+    EvidenceSuggestion,
     EvidenceUpload,
     OneTimeToken,
     ProcessingJob,
@@ -36,6 +38,8 @@ from .schemas import (
     DimensionScoreRequest,
     DimensionScoreResponse,
     EmailRequest,
+    EvidenceReviewRequest,
+    ExtractionResponse,
     LoginRequest,
     ProfileResponse,
     ProfileSetupRequest,
@@ -451,6 +455,77 @@ def list_uploads(
     )
 
 
+@app.get("/api/v1/evidence/uploads/{upload_id}/extraction", response_model=ExtractionResponse)
+def get_extraction(
+    upload_id: UUID,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ExtractionResponse:
+    extraction = db.scalar(
+        select(DocumentExtraction)
+        .join(EvidenceUpload, EvidenceUpload.id == DocumentExtraction.upload_id)
+        .where(DocumentExtraction.upload_id == upload_id, EvidenceUpload.user_id == user.id)
+    )
+    if extraction is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Extraction not found")
+    suggestions = list(
+        db.scalars(
+            select(EvidenceSuggestion)
+            .where(EvidenceSuggestion.extraction_id == extraction.id)
+            .order_by(EvidenceSuggestion.category, EvidenceSuggestion.canonical_skill)
+        )
+    )
+    return ExtractionResponse(
+        upload_id=upload_id,
+        parser_version=extraction.parser_version,
+        character_count=extraction.character_count,
+        page_count=extraction.page_count,
+        suggestions=suggestions,
+    )
+
+
+@app.post("/api/v1/evidence/uploads/{upload_id}/review", response_model=UploadResponse)
+def review_extraction(
+    upload_id: UUID,
+    payload: EvidenceReviewRequest,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EvidenceUpload:
+    upload = db.scalar(select(EvidenceUpload).where(EvidenceUpload.id == upload_id, EvidenceUpload.user_id == user.id))
+    if upload is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload not found")
+    if upload.status != "awaiting_review":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Evidence is not awaiting review")
+    extraction = db.scalar(select(DocumentExtraction).where(DocumentExtraction.upload_id == upload.id))
+    if extraction is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Extraction is unavailable")
+    suggestions = list(
+        db.scalars(select(EvidenceSuggestion).where(EvidenceSuggestion.extraction_id == extraction.id))
+    )
+    decisions = {decision.suggestion_id: decision.decision for decision in payload.decisions}
+    expected_ids = {suggestion.id for suggestion in suggestions}
+    if set(decisions) != expected_ids:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Review every suggestion once")
+    reviewed_at = datetime.now(UTC)
+    for suggestion in suggestions:
+        suggestion.review_status = decisions[suggestion.id]
+        suggestion.reviewed_at = reviewed_at
+    upload.status = "reviewed"
+    audit(
+        db,
+        "evidence.extraction_reviewed",
+        user_id=user.id,
+        metadata={
+            "upload_id": str(upload.id),
+            "confirmed": sum(decision == "confirmed" for decision in decisions.values()),
+            "rejected": sum(decision == "rejected" for decision in decisions.values()),
+        },
+    )
+    db.commit()
+    db.refresh(upload)
+    return upload
+
+
 @app.delete("/api/v1/evidence/uploads/{upload_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_upload(
     upload_id: UUID,
@@ -491,6 +566,15 @@ def delete_account(
 ) -> None:
     if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Password is incorrect")
+    storage_keys = list(db.scalars(select(EvidenceUpload.storage_key).where(EvidenceUpload.user_id == user.id)))
+    try:
+        for storage_key in storage_keys:
+            delete_object(storage_key)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Private files could not be deleted; the account was preserved",
+        ) from exc
     audit(db, "account.deleted", user_id=user.id)
     db.flush()
     db.delete(user)
