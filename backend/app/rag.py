@@ -1,3 +1,5 @@
+import hashlib
+import math
 from collections.abc import Callable, Iterable
 from functools import lru_cache
 from typing import Any
@@ -34,14 +36,40 @@ def checked_vectors(vectors: Iterable[Any]) -> list[list[float]]:
     return values
 
 
-def embed_passages(values: list[str]) -> list[list[float]]:
-    vectors = checked_vectors(embedding_model().passage_embed(values))
+def fallback_vectors(values: list[str]) -> list[list[float]]:
+    """Keep retrieval usable when the optional ONNX model cannot be downloaded.
+
+    This is deliberately a lexical hashing representation, not an AI embedding.
+    Full-text ranking remains the authoritative signal until the local model is available.
+    """
+    vectors: list[list[float]] = []
+    for value in values:
+        vector = [0.0] * 384
+        for token in value.casefold().split():
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
+            index = int.from_bytes(digest[:2], "big") % 384
+            vector[index] += 1.0 if digest[2] % 2 else -1.0
+        norm = math.sqrt(sum(item * item for item in vector)) or 1.0
+        vectors.append([item / norm for item in vector])
     return vectors
 
 
+def embed_passages(values: list[str]) -> list[list[float]]:
+    if get_settings().embedding_mode == "hash":
+        return fallback_vectors(values)
+    try:
+        return checked_vectors(embedding_model().passage_embed(values))
+    except (RuntimeError, ValueError, OSError):
+        return fallback_vectors(values)
+
+
 def embed_query(value: str) -> list[float]:
-    vectors = checked_vectors(embedding_model().query_embed(value))
-    return vectors[0]
+    if get_settings().embedding_mode == "hash":
+        return fallback_vectors([value])[0]
+    try:
+        return checked_vectors(embedding_model().query_embed(value))[0]
+    except (RuntimeError, ValueError, OSError):
+        return fallback_vectors([value])[0]
 
 
 def index_job_postings(

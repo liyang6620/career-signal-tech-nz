@@ -117,7 +117,7 @@ CI runs the same checks on every pull request and push to `main`.
 
 ## Evidence retrieval
 
-The current RAG foundation indexes governed job descriptions into bounded, versioned chunks using the free local `BAAI/bge-small-en-v1.5` embedding model with its passage/query modes. Unchanged postings are skipped using their content hash. Retrieval applies optional role-family, location, seniority and publication-window filters before combining PostgreSQL full-text ranking with pgvector cosine ranking through reciprocal-rank fusion.
+The current RAG foundation indexes governed job descriptions into bounded, versioned chunks using the free local `BAAI/bge-small-en` embedding model with its passage/query modes. Unchanged postings are skipped using their content hash. Retrieval applies optional role-family, location, seniority and publication-window filters before combining PostgreSQL full-text ranking with pgvector cosine ranking through reciprocal-rank fusion.
 
 `POST /api/v1/rag/index` is protected by the ingestion credential. `POST /api/v1/rag/search` is available to verified users and returns excerpts with stable citation labels, original job URLs, publication dates and retrieval scores. It does not generate an answer or a market claim. The first indexing run downloads the local model into a persistent Docker cache volume; no OpenAI key is used.
 

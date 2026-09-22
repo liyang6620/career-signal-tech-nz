@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     clamav_port: int = 3310
     upload_max_bytes: int = 10 * 1024 * 1024
     ingestion_api_key: str = "development-ingestion-key"
-    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    # This model has a stable fastembed/Qdrant distribution and 384 dimensions.
+    embedding_model: str = "BAAI/bge-small-en"
+    embedding_mode: str = "hash"
     embedding_cache_path: str = ".cache/fastembed"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
