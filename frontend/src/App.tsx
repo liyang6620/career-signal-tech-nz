@@ -383,12 +383,14 @@ export default function App() {
       setError("Select the public repositories you want to use, then click Review evidence again.");
       return;
     }
+    let githubValue = github;
     if (githubCandidates.length > 0) {
       if (!selectedGithubUrls.size) { setError("Select at least one GitHub repository."); return; }
-      setGithub(Array.from(selectedGithubUrls).join(", "));
+      githubValue = Array.from(selectedGithubUrls).join(", ");
+      setGithub(githubValue);
     }
-    if (github.trim() && githubProjects.length === 0) {
-      const urls = github.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+    if (githubValue.trim() && githubProjects.length === 0) {
+      const urls = githubValue.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
       const projects: GithubProject[] = [];
       for (const rawUrl of urls) {
         const response = await fetch(`${API_URL}/api/v1/evidence/github`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ url: rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}` }) });
