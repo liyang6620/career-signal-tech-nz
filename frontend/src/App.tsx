@@ -414,11 +414,11 @@ export default function App() {
           <button className={view === "market" ? "active" : ""} onClick={openMarket}><BarChart3 size={17} />Market explorer</button>
           <button className={view === "decoder" ? "active" : ""} onClick={() => setView("decoder")}><BriefcaseBusiness size={17} />Role decoder</button>
           <button className={view === "evidence" ? "active" : ""} onClick={() => setView("evidence")}><Search size={17} />Evidence search</button>
-          <a><Target size={17} />Career path map</a>
-          <a><FileText size={17} />Evidence graph</a>
-          <a><BookOpen size={17} />SkillRoute</a>
+          <button className="nav-coming-soon" disabled><Target size={17} />Career path map <small>Planned</small></button>
+          <button className="nav-coming-soon" onClick={() => setView("workspace")}><FileText size={17} />Evidence graph</button>
+          <button className="nav-coming-soon" disabled><BookOpen size={17} />SkillRoute <small>Planned</small></button>
         </nav>
-        <div className="sidebar-bottom"><a><CircleHelp size={17} />Help</a><a><Settings size={17} />Settings</a><div className="account"><UserRound size={18} /><span>{user.display_name}</span><button onClick={logout} aria-label="Sign out" title="Sign out"><LogOut size={15} /></button></div></div>
+        <div className="sidebar-bottom"><button className="nav-coming-soon" disabled><CircleHelp size={17} />Help <small>Planned</small></button><button className="nav-coming-soon" disabled><Settings size={17} />Settings <small>Planned</small></button><div className="account"><UserRound size={18} /><span>{user.display_name}</span><button onClick={logout} aria-label="Sign out" title="Sign out"><LogOut size={15} /></button></div></div>
       </aside>
 
       <main>

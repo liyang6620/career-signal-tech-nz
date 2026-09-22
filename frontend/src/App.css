@@ -198,6 +198,10 @@ select {
 .product-shell .source-row .url-control input { display: block; height: 38px; line-height: 1.45; font-size: 14px; }
 .product-shell .source-row .url-control input::placeholder { color: #7f8992; opacity: 1; }
 .product-shell .sidebar nav button, .product-shell .sidebar nav a { font-size: 14px; }
+.product-shell .sidebar nav .nav-coming-soon, .product-shell .sidebar-bottom .nav-coming-soon { width: 100%; display:flex; align-items:center; gap:12px; padding:10px 12px; border:0; background:transparent; color:#647080; text-align:left; }
+.product-shell .sidebar nav .nav-coming-soon:not(:disabled):hover { background:#f1f6f3; color:#1f6348; cursor:pointer; }
+.product-shell .nav-coming-soon:disabled { opacity:.75; cursor:not-allowed; }
+.product-shell .nav-coming-soon small { margin-left:auto; color:#9aa39d; font-size:10px; font-weight:500; }
 .product-shell .topbar, .product-shell .quiet-button, .product-shell .stepper span, .product-shell .stepper i { font-size: 14px; }
 .product-shell .panel-title h2 { font-size: 21px; }
 .product-shell .setup-header h1 { font-size: 32px; }
