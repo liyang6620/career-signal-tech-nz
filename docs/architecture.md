@@ -9,7 +9,7 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
                                                                     |
                                 cited retrieval -> AI explanation <-+
                                                                     |
-                                                     dashboard + career route
+                                                     dashboard + career route + application tracker
 ```
 
 ## Trust boundaries
@@ -65,25 +65,37 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
 - Each posting retains its canonical source URL, content hash, publication time and retrieval time.
 - Role family, seniority and skill mentions are produced by a versioned deterministic classifier over responsibilities.
 - Market Explorer aggregates only persisted governed records and shows an explicit empty state when none exist.
-- Permitted Greenhouse, Lever and schema.org adapters share the same persistence path as structured imports and conservatively reject records without an explicit New Zealand location.
-- Collector source configuration records the permission basis; each bounded run records success/failure, counts and timestamps.
+- Permitted Greenhouse, Lever, Ashby, SmartRecruiters, Workday, Workable and schema.org adapters share the same persistence path as structured imports and conservatively reject records without an explicit New Zealand location or a match to the active technology role taxonomy.
+- Collector source configuration records the permission basis; each bounded run is queued durably, claimed with a worker lease, retried up to three times, and records success/failure, counts and timestamps.
 - Market quality reporting exposes source freshness, missing publication dates, stale records and low-confidence deterministic classifications.
-- Collector runs are currently synchronous admin operations. Scheduling, durable retries and per-source rate policies remain future work.
+- Collector requests return immediately with a queued run. The worker also materialises per-source recurring schedules, prevents duplicate active runs, enforces source-specific minimum intervals and refreshes changed RAG chunks after successful collection.
+
+## Persisted user workflow
+
+- Saved opportunities are scoped to the authenticated user and use a unique canonical source URL per account.
+- Application status changes are persisted as `saved`, `preparing`, `applied`, `interview`, `offer`, `rejected` or `archived`.
+- Every application stage change is appended to `job_status_events` and can be inspected from the Application Tracker, preserving an auditable timeline instead of overwriting the previous state.
+- A saved governed-market role is decoded from its full persisted advertisement. Its current evidence coverage and priority gaps are shown in the tracker, and a user can generate a persistent preparation plan linked to that specific opportunity.
+- Role Decoder responses are stored as immutable analysis snapshots with the role family, scope status, confidence and JSON result. This lets the UI show recent decisions without recalculating or losing the original output.
+- Upload processing exposes durable job records and a separate readiness endpoint so the frontend and container orchestrator can distinguish a live API from a database-ready service.
 
 ## Scoring
 
-Each assessment is bound to target role, location, seniority, and market window. A skill contribution is:
+The role comparison keeps evidence classification separate from presentation. Candidate evidence maturity is:
 
 ```text
-(evidence level / 5)
-* quality factor
-* recency factor
-* verification factor
-* target-role relevance
-* 100
+non-linear evidence-level baseline
+* confidence factor (0.85 + 0.15 * extraction confidence)
++ min(9, 3 * log2(independent source count))
++ 4 when two or more source types corroborate the capability
 ```
 
-The dimension score is `65% coverage + 35% evidence depth`. A missing required high-weight skill caps a dimension at 59. All factors and contributions are returned by the API for auditability.
+JD capability priority is calculated independently from explicit mention, repetition, requirement language and title
+context. The decoder also returns independent coverage-style proximity scores for every supported role family, so
+mixed and out-of-scope adverts are not forced into one class. Radar axes contain only skills found in the JD, and the
+candidate evidence query uses those same skill slugs. Both results are capped at 100. The API returns each component so the UI can explain why,
+for example, one skill scores 31 while another scores 93. The deterministic dimension-scoring endpoint remains
+available for aggregate assessments, with `65% coverage + 35% evidence depth` and a missing-required-skill cap.
 
 ## RAG design
 
@@ -91,8 +103,8 @@ PostgreSQL is the system of record and pgvector supports semantic retrieval. Gov
 
 Retrieval filters first by role family, location, seniority and publication window. PostgreSQL English full-text search and pgvector cosine search each produce a ranked candidate list, then reciprocal-rank fusion combines them without model-generated relevance scores. Results expose the original posting URL, excerpt, publication date and deterministic citation label. OpenAI may later explain these retrieved citations with typed outputs, but is not part of indexing, retrieval or scoring.
 
-The protected evaluation endpoint runs a small versioned query set with explicit role-family and term expectations. It reports Recall@K and mean reciprocal rank only over the current indexed corpus, and returns `insufficient_data` when that corpus is empty. These metrics are regression signals for engineering changes; they are not market-quality claims and will later be complemented by reviewed human relevance labels.
+The protected evaluation endpoint runs a versioned labelled query set with explicit role-family and term expectations. It reports Recall@K and mean reciprocal rank only over the current indexed corpus, and returns `insufficient_data` when that corpus is empty. JD extraction and CV evidence extraction have separate labelled regression sets. In-product relevance judgements complement the offline RAG set without storing CV or JD text in analytics events.
 
 ## Production evolution
 
-The API now exposes the scoring contract, identity lifecycle, persisted career profiles, private document ingestion, user-reviewed CV evidence extraction, compliant market ingestion and citation-returning hybrid retrieval. Next increments add reviewed relevance labels, observability, backup policies and deployment manifests.
+The API now exposes the scoring contract, identity lifecycle, persisted career profiles, private document ingestion, user-reviewed CV evidence extraction, compliant market ingestion and citation-returning hybrid retrieval. `/health`, `/ready`, structured request IDs and `/metrics` provide an operational baseline. Metrics include queue health, overdue sources, 30-day active users and a small allow-list of product events; event labels never contain CV, JD or query content. External telemetry export and restore drills remain deployment work.

@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = "postgresql+psycopg://career_signal:career_signal@127.0.0.1:5432/career_signal"
     openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
+    openai_max_output_tokens: int = 900
     cors_origins: str = "http://localhost:5173"
     jwt_secret: str = "development-only-change-me-at-least-32-bytes"
     access_token_minutes: int = 15

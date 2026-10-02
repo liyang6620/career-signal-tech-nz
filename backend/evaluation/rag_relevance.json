@@ -1,0 +1,6 @@
+[
+  {"id": "data-quality-testing", "query": "How do junior data roles use testing and data quality?", "role_family": "data-engineer", "expected_terms": ["test", "quality", "data"]},
+  {"id": "customer-facing-software", "query": "What do software roles need for customer-facing product development?", "role_family": "software-engineer", "expected_terms": ["software", "product", "customer"]},
+  {"id": "production-ai", "query": "What do AI application roles need to ship production systems?", "role_family": "ai-application-engineer", "expected_terms": ["ai", "production", "system"]},
+  {"id": "cloud-delivery", "query": "Which delivery practices appear in New Zealand cloud roles?", "role_family": "cloud-devops", "expected_terms": ["cloud", "deploy"]}
+]

@@ -2,14 +2,27 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.github import GithubSnapshot
 from app.main import app
-from app.models import DocumentExtraction, EvidenceSuggestion, EvidenceUpload, JobChunk, JobPosting, MarketSource
+from app.models import (
+    CanonicalSkill,
+    DocumentExtraction,
+    EmailOutbox,
+    EvidenceSuggestion,
+    EvidenceUpload,
+    JobAnalysis,
+    JobChunk,
+    JobPosting,
+    JobStatusEvent,
+    MarketSource,
+    ProcessingJob,
+)
+from app.taxonomy import SKILLS
 
 
 @pytest.fixture
@@ -21,6 +34,12 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     )
     testing_session = sessionmaker(bind=engine, expire_on_commit=False)
     Base.metadata.create_all(engine)
+    with testing_session() as session:
+        session.add_all(
+            CanonicalSkill(slug=slug, name=name, category=category, taxonomy_version="test")
+            for slug, (name, category, _) in SKILLS.items()
+        )
+        session.commit()
 
     def override_db():
         with testing_session() as session:
@@ -66,6 +85,10 @@ def test_registration_hashes_password_and_returns_authenticated_user(client: Tes
     assert response.status_code == 200
     assert response.json()["email"] == "candidate@example.com"
     assert response.json()["is_verified"] is True
+    with client.testing_session() as session:  # type: ignore[attr-defined]
+        outbox = session.scalar(select(EmailOutbox).where(EmailOutbox.recipient == "candidate@example.com"))
+        assert outbox is not None
+        assert outbox.status == "queued"
 
 
 def test_unverified_user_cannot_create_profile_and_token_is_single_use(client: TestClient) -> None:
@@ -94,6 +117,33 @@ def test_duplicate_registration_and_bad_login_are_rejected(client: TestClient) -
         json={"email": "candidate@example.com", "password": "wrong-password"},
     )
     assert bad_login.status_code == 401
+
+
+def test_development_plan_is_persisted_and_tracks_completion(client: TestClient) -> None:
+    auth = register(client)
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+
+    generated = client.post(
+        "/api/v1/plan/generate",
+        headers=headers,
+        json={"role_family": "data-engineer"},
+    )
+    assert generated.status_code == 200
+    tasks = generated.json()
+    assert len(tasks) == 4
+    assert [task["stage"] for task in tasks] == ["diagnose", "build", "verify", "validate"]
+
+    completed = client.patch(
+        f"/api/v1/plan/{tasks[0]['id']}",
+        headers=headers,
+        json={"status": "completed"},
+    )
+    assert completed.status_code == 200
+    assert completed.json()["completed_at"] is not None
+
+    restored = client.get("/api/v1/plan?role_family=data-engineer", headers=headers)
+    assert restored.status_code == 200
+    assert restored.json()[0]["status"] == "completed"
 
 
 def test_login_is_rate_limited_after_repeated_failures(client: TestClient) -> None:
@@ -229,6 +279,41 @@ def test_private_upload_is_validated_persisted_and_user_scoped(
     assert len(deleted_keys) == 1
 
 
+def test_failed_upload_can_be_retried_as_a_durable_processing_job(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.main.ensure_bucket", lambda: None)
+    monkeypatch.setattr("app.main.presigned_put", lambda key, content_type, size: "http://storage.test/signed")
+    auth = register(client)
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+    initiated = client.post(
+        "/api/v1/evidence/uploads",
+        headers=headers,
+        json={"filename": "candidate.pdf", "content_type": "application/pdf", "size": 128},
+    )
+    upload_id = UUID(initiated.json()["id"])
+    with client.testing_session() as session:  # type: ignore[attr-defined]
+        upload = session.get(EvidenceUpload, upload_id)
+        assert upload is not None
+        upload.status = "parse_failed"
+        upload.failure_reason = "Document text could not be extracted"
+        session.commit()
+
+    retried = client.post(f"/api/v1/evidence/uploads/{upload_id}/retry", headers=headers)
+    assert retried.status_code == 202
+    assert retried.json()["status"] == "queued_for_parsing"
+    with client.testing_session() as session:  # type: ignore[attr-defined]
+        job = session.scalar(
+            select(ProcessingJob)
+            .where(ProcessingJob.upload_id == upload_id)
+            .order_by(ProcessingJob.created_at.desc())
+        )
+        assert job is not None
+        assert job.job_type == "document_parse"
+        assert job.status == "queued"
+
+
 def test_upload_rejects_mismatched_extension_and_oversized_file(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -296,6 +381,15 @@ def test_extracted_evidence_requires_owner_and_complete_review(
                     confidence=0.75,
                     proposed_level=2,
                 ),
+                EvidenceSuggestion(
+                    extraction_id=extraction.id,
+                    canonical_skill="C++",
+                    category="Programming",
+                    excerpt="Implemented data structures in C++",
+                    locator="line 3",
+                    confidence=0.8,
+                    proposed_level=2,
+                ),
             ]
         )
         session.commit()
@@ -319,8 +413,11 @@ def test_extracted_evidence_requires_owner_and_complete_review(
         headers=headers,
         json={
             "decisions": [
-                {"suggestion_id": suggestion["id"], "decision": "confirmed" if index == 0 else "rejected"}
-                for index, suggestion in enumerate(suggestions)
+                {
+                    "suggestion_id": suggestion["id"],
+                    "decision": "rejected" if suggestion["canonical_skill"] == "SQL" else "confirmed",
+                }
+                for suggestion in suggestions
             ]
         },
     )
@@ -378,7 +475,8 @@ def test_public_github_evidence_is_reviewed_and_included_in_fit(
     assert reviewed.json()["status"] == "reviewed"
     fit = client.get("/api/v1/evidence/fit?role_family=ai", headers=headers)
     assert fit.status_code == 200
-    assert any(item["evidence_level"] == 2 for item in fit.json()["contributions"])
+    assert any(item["evidence_level"] >= 3 for item in fit.json()["contributions"])
+    assert any(item["source_count"] == 1 for item in fit.json()["contributions"])
     graph = client.get("/api/v1/evidence/graph?role_family=ai", headers=headers)
     assert any(item["source_type"] == "github" for item in graph.json()["evidence"])
 
@@ -388,7 +486,8 @@ def test_role_decoder_and_governed_market_import(client: TestClient) -> None:
     headers = {"Authorization": f"Bearer {auth['access_token']}"}
     description = (
         "Build Python data pipelines with SQL, dbt, Airflow and Docker. "
-        "Use automated testing and Git in a graduate engineering team."
+        "Use automated testing and Git in a graduate engineering team. "
+        "Applicants must be New Zealand citizens and eligible to work in New Zealand."
     )
     decoded = client.post(
         "/api/v1/role-decoder",
@@ -398,6 +497,17 @@ def test_role_decoder_and_governed_market_import(client: TestClient) -> None:
     assert decoded.status_code == 200
     assert decoded.json()["role_family"] == "data-engineer"
     assert decoded.json()["seniority"] == "graduate"
+    assert {item["category"] for item in decoded.json()["eligibility_requirements"]} == {
+        "citizenship", "work-authorisation"
+    }
+
+    without_title = client.post(
+        "/api/v1/role-decoder",
+        headers=headers,
+        json={"description": description},
+    )
+    assert without_title.status_code == 200
+    assert without_title.json()["role_family"] == "data-engineer"
     payload = {
         "source": {
             "name": "Permitted test feed",
@@ -425,7 +535,76 @@ def test_role_decoder_and_governed_market_import(client: TestClient) -> None:
     summary = client.get("/api/v1/market/summary", headers=headers)
     assert summary.status_code == 200
     assert summary.json()["posting_count"] == 1
+    assert summary.json()["source_count"] == 1
+    assert summary.json()["latest_retrieved_at"] is not None
     assert summary.json()["roles"][0]["role_family"] == "data-engineer"
+    assert summary.json()["seniority"] == [{"seniority": "graduate", "count": 1}]
+    assert summary.json()["role_seniority"] == [
+        {"role_family": "data-engineer", "seniority": "graduate", "count": 1}
+    ]
+    assert summary.json()["locations"] == [{"location": "Auckland", "count": 1}]
+    assert summary.json()["role_locations"] == [
+        {"role_family": "data-engineer", "location": "Auckland", "count": 1}
+    ]
+    assert any(item["role_family"] == "data-engineer" for item in summary.json()["role_skills"])
+
+
+def test_role_analysis_can_be_restored_and_tracked_with_status_history(client: TestClient) -> None:
+    auth = register(client)
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+    decoded = client.post(
+        "/api/v1/role-decoder",
+        headers=headers,
+        json={
+            "title": "Graduate Data Engineer",
+            "description": "Build Python and SQL data pipelines with dbt, Airflow, Docker and automated testing.",
+        },
+    )
+    assert decoded.status_code == 200
+    analysis_id = UUID(decoded.json()["analysis_id"])
+
+    restored = client.get(f"/api/v1/role-decoder/history/{analysis_id}", headers=headers)
+    assert restored.status_code == 200
+    assert restored.json()["description"].startswith("Build Python")
+    assert restored.json()["result"]["skill_demands"]
+
+    saved = client.post(
+        f"/api/v1/jobs/from-analysis/{analysis_id}",
+        headers=headers,
+        json={"company": "Example Ltd", "location": "Wellington"},
+    )
+    assert saved.status_code == 201
+    job_id = UUID(saved.json()["id"])
+    assert saved.json()["analysis_id"] == str(analysis_id)
+    assert saved.json()["status"] == "saved"
+    assert saved.json()["skill_count"] >= 5
+    assert saved.json()["evidenced_skill_count"] == 0
+    assert saved.json()["top_gaps"]
+
+    plan = client.post(
+        "/api/v1/plan/generate",
+        headers=headers,
+        json={"role_family": "data-engineer", "saved_job_id": str(job_id), "replace": True},
+    )
+    assert plan.status_code == 200
+    assert len(plan.json()) == 4
+    assert {item["saved_job_id"] for item in plan.json()} == {str(job_id)}
+    assert plan.json()[0]["skill_slug"] in {item["slug"] for item in restored.json()["result"]["skill_demands"]}
+
+    for next_status in ("applied", "interview"):
+        updated = client.patch(
+            f"/api/v1/jobs/{job_id}",
+            headers=headers,
+            json={"status": next_status},
+        )
+        assert updated.status_code == 200
+    history = client.get(f"/api/v1/jobs/{job_id}/history", headers=headers)
+    assert history.status_code == 200
+    assert [item["to_status"] for item in history.json()] == ["saved", "applied", "interview"]
+
+    with client.testing_session() as session:  # type: ignore[attr-defined]
+        assert session.get(JobAnalysis, analysis_id) is not None
+        assert len(list(session.scalars(select(JobStatusEvent).where(JobStatusEvent.saved_job_id == job_id)))) == 3
 
 
 def test_evidence_search_returns_source_citations(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

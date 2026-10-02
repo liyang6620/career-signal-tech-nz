@@ -68,6 +68,24 @@ def fetch_json(url: str) -> object:
         raise RuntimeError("Collector source request failed") from exc
 
 
+def post_json(url: str, payload: dict[str, object]) -> object:
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "CareerSignal-Tech-NZ/0.1",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            return json.load(response)
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError("Collector source request failed") from exc
+
+
 def parse_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -104,6 +122,158 @@ def collect_lever(site: str, company: str) -> list[CollectedPosting]:
         )
         for item in data
     ]
+
+
+def collect_ashby(board: str, company: str) -> list[CollectedPosting]:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", board):
+        raise ValueError("Invalid Ashby board identifier")
+    data = fetch_json(f"https://api.ashbyhq.com/posting-api/job-board/{board}")
+    return [
+        CollectedPosting(
+            source_url=item["jobUrl"],
+            title=item["title"],
+            company=company,
+            location=item.get("location", "New Zealand"),
+            description=item.get("descriptionPlain") or plain_text(item.get("descriptionHtml", "")),
+            published_at=parse_datetime(item.get("publishedAt")),
+        )
+        for item in data.get("jobs", [])
+        if item.get("isListed", True)
+    ]
+
+
+def collect_smartrecruiters(company_identifier: str, company: str) -> list[CollectedPosting]:
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", company_identifier):
+        raise ValueError("Invalid SmartRecruiters company identifier")
+    base_url = f"https://api.smartrecruiters.com/v1/companies/{company_identifier}/postings"
+    first_page = fetch_json(f"{base_url}?limit=100&offset=0")
+    summaries = list(first_page.get("content", []))
+    total = min(int(first_page.get("totalFound", len(summaries))), 1000)
+    for offset in range(100, total, 100):
+        page = fetch_json(f"{base_url}?limit=100&offset={offset}")
+        summaries.extend(page.get("content", []))
+
+    postings: list[CollectedPosting] = []
+    for summary in summaries:
+        summary_location = summary.get("location", {}).get("fullLocation", "")
+        if summary_location and not is_new_zealand_location(summary_location):
+            continue
+        reference = summary.get("ref")
+        if not reference:
+            continue
+        detail = fetch_json(reference)
+        if not detail.get("active", True) or detail.get("visibility", "PUBLIC") != "PUBLIC":
+            continue
+        sections = detail.get("jobAd", {}).get("sections", {})
+        description = " ".join(
+            section.get("text", "")
+            for section in sections.values()
+            if isinstance(section, dict)
+        )
+        location = detail.get("location", {})
+        postings.append(CollectedPosting(
+            source_url=detail.get("postingUrl") or summary.get("postingUrl") or reference,
+            title=detail.get("name") or summary.get("name", "Untitled role"),
+            company=company,
+            location=location.get("fullLocation") or summary.get("location", {}).get("fullLocation", ""),
+            description=plain_text(description),
+            published_at=parse_datetime(detail.get("releasedDate") or summary.get("releasedDate")),
+        ))
+    return postings
+
+
+def _workday_board(identifier: str) -> tuple[str, str, str]:
+    parsed = urlparse(identifier)
+    hostname = (parsed.hostname or "").casefold()
+    if parsed.scheme != "https" or not hostname.endswith(".myworkdayjobs.com"):
+        raise ValueError("Workday identifier must be a public myworkdayjobs.com board URL")
+    tenant = hostname.split(".", 1)[0]
+    site = parsed.path.strip("/").split("/", 1)[0]
+    if not re.fullmatch(r"[a-z0-9_-]+", tenant) or not re.fullmatch(r"[A-Za-z0-9_-]+", site):
+        raise ValueError("Invalid Workday board URL")
+    return f"{parsed.scheme}://{parsed.netloc}", tenant, site
+
+
+def collect_workday(identifier: str, company: str) -> list[CollectedPosting]:
+    origin, tenant, site = _workday_board(identifier)
+    api_root = f"{origin}/wday/cxs/{tenant}/{site}"
+    summaries: list[dict] = []
+    offset = 0
+    while offset < 1000:
+        page = post_json(
+            f"{api_root}/jobs",
+            {"appliedFacets": {}, "limit": 20, "offset": offset, "searchText": ""},
+        )
+        batch = page.get("jobPostings", [])
+        summaries.extend(batch)
+        offset += len(batch)
+        if not batch or offset >= int(page.get("total", len(summaries))):
+            break
+
+    postings: list[CollectedPosting] = []
+    for summary in summaries:
+        external_path = summary.get("externalPath")
+        if not external_path or not external_path.startswith("/job/"):
+            continue
+        detail = fetch_json(f"{api_root}{external_path}").get("jobPostingInfo", {})
+        postings.append(CollectedPosting(
+            source_url=detail.get("externalUrl") or f"{origin}/{site}{external_path}",
+            title=detail.get("title") or summary.get("title", "Untitled role"),
+            company=company,
+            location=detail.get("location", ""),
+            description=plain_text(detail.get("jobDescription", "")),
+            published_at=parse_datetime(detail.get("startDate")),
+        ))
+    return postings
+
+
+def collect_workable(account: str, company: str) -> list[CollectedPosting]:
+    if not re.fullmatch(r"[a-z0-9-]+", account):
+        raise ValueError("Invalid Workable account identifier")
+    list_url = f"https://apply.workable.com/api/v3/accounts/{account}/jobs"
+    payload: dict[str, object] = {
+        "query": "",
+        "location": [],
+        "department": [],
+        "worktype": [],
+        "remote": [],
+    }
+    summaries: list[dict] = []
+    for _ in range(100):
+        page = post_json(list_url, payload)
+        summaries.extend(page.get("results", []))
+        token = page.get("nextPage")
+        if not token:
+            break
+        payload["token"] = token
+
+    postings: list[CollectedPosting] = []
+    for summary in summaries:
+        summary_location = summary.get("location", {})
+        if summary_location.get("countryCode", "").upper() != "NZ":
+            continue
+        shortcode = summary.get("shortcode")
+        if not shortcode or not re.fullmatch(r"[A-Za-z0-9]+", shortcode):
+            continue
+        detail = fetch_json(f"https://apply.workable.com/api/v2/accounts/{account}/jobs/{shortcode}")
+        if detail.get("state") != "published" or detail.get("isInternal", False):
+            continue
+        location = detail.get("location", {})
+        location_label = ", ".join(
+            filter(None, [location.get("city"), location.get("region"), location.get("country")])
+        )
+        description = " ".join(
+            detail.get(field, "") for field in ("description", "requirements", "benefits")
+        )
+        postings.append(CollectedPosting(
+            source_url=f"https://apply.workable.com/{account}/j/{shortcode}/",
+            title=detail.get("title") or summary.get("title", "Untitled role"),
+            company=company,
+            location=location_label,
+            description=plain_text(description),
+            published_at=parse_datetime(detail.get("published")),
+        ))
+    return postings
 
 
 def collect_schema_org(url: str, company: str) -> list[CollectedPosting]:
@@ -165,6 +335,14 @@ def collect(adapter: str, identifier: str, company: str) -> list[CollectedPostin
         return collect_greenhouse(identifier, company)
     if adapter == "lever":
         return collect_lever(identifier, company)
+    if adapter == "ashby":
+        return collect_ashby(identifier, company)
+    if adapter == "smartrecruiters":
+        return collect_smartrecruiters(identifier, company)
+    if adapter == "workday":
+        return collect_workday(identifier, company)
+    if adapter == "workable":
+        return collect_workable(identifier, company)
     if adapter == "schema-org":
         return collect_schema_org(identifier, company)
     raise ValueError("Unknown collector adapter")

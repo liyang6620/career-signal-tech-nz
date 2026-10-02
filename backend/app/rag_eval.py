@@ -1,5 +1,7 @@
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -17,26 +19,20 @@ class EvaluationCase:
     expected_terms: tuple[str, ...]
 
 
-EVALUATION_CASES = (
-    EvaluationCase(
-        "data-quality-testing",
-        "How do junior data roles use testing and data quality?",
-        "data-engineer",
-        ("test", "quality", "data"),
-    ),
-    EvaluationCase(
-        "customer-facing-software",
-        "What do software roles need for customer-facing product development?",
-        "software-engineer",
-        ("software", "product", "customer"),
-    ),
-    EvaluationCase(
-        "production-ai",
-        "What do AI application roles need to ship production systems?",
-        "ai-application-engineer",
-        ("ai", "production", "system"),
-    ),
-)
+def _load_evaluation_cases() -> tuple[EvaluationCase, ...]:
+    path = Path(__file__).parents[1] / "evaluation" / "rag_relevance.json"
+    if not path.exists():
+        path = Path.cwd() / "evaluation" / "rag_relevance.json"
+    cases = json.loads(path.read_text(encoding="utf-8"))
+    return tuple(EvaluationCase(
+        case_id=item["id"],
+        query=item["query"],
+        role_family=item["role_family"],
+        expected_terms=tuple(item["expected_terms"]),
+    ) for item in cases)
+
+
+EVALUATION_CASES = _load_evaluation_cases()
 
 
 def evaluate_retrieval(db: Session, *, limit: int = 5) -> dict[str, Any]:

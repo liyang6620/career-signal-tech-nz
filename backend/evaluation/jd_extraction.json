@@ -1,0 +1,34 @@
+[
+  {
+    "id": "nz-data-systems-analyst",
+    "title": "Data & Systems Analyst",
+    "description": "Experience with complex data, geospatial data and ETL processing is essential. The ideal applicant has Python, Excel, PostgreSQL and TypeScript experience.",
+    "expected_role": "data-analyst",
+    "expected_skills": ["geospatial-data", "etl", "python", "excel", "postgresql", "typescript"],
+    "expected_scope": "matched"
+  },
+  {
+    "id": "nz-graduate-platform-engineer",
+    "title": "Graduate Platform Engineer",
+    "description": "Build cloud infrastructure with AWS, Docker, Kubernetes, Terraform and CI/CD. You must be eligible to work in New Zealand.",
+    "expected_role": "cloud-devops",
+    "expected_skills": ["aws", "docker", "kubernetes", "terraform", "ci-cd"],
+    "expected_eligibility": ["work-authorisation"],
+    "expected_scope": "matched"
+  },
+  {
+    "id": "mixed-software-ai-intern",
+    "title": "Software and AI Engineering Intern",
+    "description": "Build TypeScript web applications and REST APIs. Prototype LLM features using RAG, embeddings and vector databases. Automated testing and Git are required.",
+    "expected_skills": ["typescript", "rest-api", "llm", "rag", "embeddings", "vector-databases", "automated-testing", "git"],
+    "expected_scope": "mixed"
+  },
+  {
+    "id": "out-of-scope-sales-role",
+    "title": "Territory Sales Manager",
+    "description": "Manage customer accounts, negotiate commercial terms and grow regional sales across the North Island.",
+    "expected_role": "out-of-scope",
+    "expected_skills": [],
+    "expected_scope": "out_of_scope"
+  }
+]

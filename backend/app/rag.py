@@ -1,5 +1,6 @@
 import hashlib
 import math
+import re
 from collections.abc import Callable, Iterable
 from functools import lru_cache
 from typing import Any
@@ -120,6 +121,43 @@ def vector_literal(vector: Iterable[float]) -> str:
     return "[" + ",".join(f"{value:.8f}" for value in vector) + "]"
 
 
+SEARCH_STOP_WORDS = {
+    "a", "an", "and", "are", "current", "expectation", "expectations", "for", "hiring",
+    "in", "job", "jobs", "market", "of", "or", "requirement", "requirements", "role", "roles",
+    "skill", "skills", "the", "to", "what", "with",
+}
+
+
+def rerank_job_results(query: str, rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """Prefer explicit query evidence and keep weak semantic matches out of the result set."""
+    query_terms = [
+        term for term in re.findall(r"[a-z0-9+#.]+", query.casefold())
+        if len(term) > 1 and term not in SEARCH_STOP_WORDS
+    ]
+    if not query_terms:
+        return rows[:limit]
+
+    query_bigrams = {" ".join(query_terms[index : index + 2]) for index in range(len(query_terms) - 1)}
+    ranked: list[tuple[float, int, dict[str, Any]]] = []
+    for index, row in enumerate(rows):
+        title = str(row.get("title") or "").casefold()
+        content = str(row.get("content") or "").casefold()
+        title_terms = set(re.findall(r"[a-z0-9+#.]+", title))
+        content_terms = set(re.findall(r"[a-z0-9+#.]+", content))
+        title_overlap = sum(term in title_terms for term in query_terms)
+        content_overlap = sum(term in content_terms for term in query_terms)
+        phrase_matches = sum(phrase in title for phrase in query_bigrams)
+        explicit_score = title_overlap * 5 + min(content_overlap, 4) + phrase_matches * 8
+        hybrid_score = float(row.get("hybrid_score") or 0)
+        ranked.append((explicit_score + hybrid_score, index, row))
+
+    relevant = [item for item in ranked if item[0] - float(item[2].get("hybrid_score") or 0) > 0]
+    if relevant:
+        ranked = relevant
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return [row for _, _, row in ranked[:limit]]
+
+
 HYBRID_SEARCH = text(
     """
     WITH filtered AS (
@@ -156,11 +194,21 @@ HYBRID_SEARCH = text(
         ) ranked
         GROUP BY id
     )
-    SELECT f.id, f.content, f.title, f.company, f.location, f.role_family, f.seniority,
-           f.source_url, f.published_at, fused.hybrid_score
-    FROM fused
-    JOIN filtered f ON f.id = fused.id
-    ORDER BY fused.hybrid_score DESC
+    , ranked_postings AS (
+        SELECT f.id, f.content, f.title, f.company, f.location, f.role_family, f.seniority,
+               f.source_url, f.published_at, fused.hybrid_score,
+               row_number() OVER (
+                   PARTITION BY lower(coalesce(f.source_url, f.title || '|' || f.company))
+                   ORDER BY fused.hybrid_score DESC, f.id
+               ) AS posting_rank
+        FROM fused
+        JOIN filtered f ON f.id = fused.id
+    )
+    SELECT id, content, title, company, location, role_family, seniority,
+           source_url, published_at, hybrid_score
+    FROM ranked_postings
+    WHERE posting_rank = 1
+    ORDER BY hybrid_score DESC
     LIMIT :result_limit
     """
 )
@@ -177,6 +225,7 @@ def search_job_evidence(
     published_after: Any,
     limit: int,
 ) -> list[dict[str, Any]]:
+    candidate_limit = min(max(limit * 6, 30), 100)
     rows = db.execute(
         HYBRID_SEARCH,
         {
@@ -186,7 +235,7 @@ def search_job_evidence(
             "location": location,
             "seniority": seniority,
             "published_after": published_after,
-            "result_limit": limit,
+            "result_limit": candidate_limit,
         },
     ).mappings()
-    return [dict(row) for row in rows]
+    return rerank_job_results(query, [dict(row) for row in rows], limit)

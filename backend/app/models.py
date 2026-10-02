@@ -48,6 +48,27 @@ class OneTimeToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class EmailOutbox(Base):
+    """Durable email delivery intent; a worker owns retries and delivery."""
+
+    __tablename__ = "email_outbox"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    recipient: Mapped[str] = mapped_column(String(320), index=True)
+    subject: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 
@@ -85,6 +106,87 @@ class CareerTarget(Base):
     role_family: Mapped[str] = mapped_column(String(80))
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SavedJob(Base):
+    """A user-owned job record used for saved searches and application tracking."""
+
+    __tablename__ = "saved_jobs"
+    __table_args__ = (UniqueConstraint("user_id", "source_url"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    analysis_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("job_analyses.id", ondelete="SET NULL"), index=True
+    )
+    source_url: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(String(240))
+    company: Mapped[str] = mapped_column(String(180))
+    location: Mapped[str] = mapped_column(String(120))
+    role_family: Mapped[str | None] = mapped_column(String(80), index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="saved", index=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class JobStatusEvent(Base):
+    """Immutable application-stage changes for a saved opportunity."""
+
+    __tablename__ = "job_status_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    saved_job_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("saved_jobs.id", ondelete="CASCADE"), index=True
+    )
+    from_status: Mapped[str | None] = mapped_column(String(30))
+    to_status: Mapped[str] = mapped_column(String(30), index=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DevelopmentPlanTask(Base):
+    """A persistent, user-owned action that turns a capability gap into evidence."""
+
+    __tablename__ = "development_plan_tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    saved_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("saved_jobs.id", ondelete="SET NULL"), index=True
+    )
+    role_family: Mapped[str] = mapped_column(String(80), index=True)
+    skill_slug: Mapped[str | None] = mapped_column(ForeignKey("canonical_skills.slug", ondelete="SET NULL"), index=True)
+    stage: Mapped[str] = mapped_column(String(30))
+    position: Mapped[int] = mapped_column(Integer)
+    due_week: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(240))
+    description: Mapped[str] = mapped_column(Text)
+    deliverable: Mapped[str] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class JobAnalysis(Base):
+    """Persisted role decoder output so a user can return to a decision later."""
+
+    __tablename__ = "job_analyses"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(240), default="")
+    description: Mapped[str] = mapped_column(Text)
+    role_family: Mapped[str] = mapped_column(String(80), index=True)
+    scope_status: Mapped[str] = mapped_column(String(30))
+    confidence: Mapped[float] = mapped_column(Float)
+    result_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class EvidenceSource(Base):
@@ -296,6 +398,10 @@ class CollectorSource(Base):
     company: Mapped[str] = mapped_column(String(180))
     permission_basis: Mapped[str] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    refresh_interval_minutes: Mapped[int] = mapped_column(Integer, default=1440)
+    minimum_interval_seconds: Mapped[int] = mapped_column(Integer, default=60)
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    last_enqueued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -307,12 +413,18 @@ class CollectorRun(Base):
         ForeignKey("collector_sources.id", ondelete="CASCADE"), index=True
     )
     status: Mapped[str] = mapped_column(String(20), index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fetched_count: Mapped[int] = mapped_column(Integer, default=0)
     accepted_count: Mapped[int] = mapped_column(Integer, default=0)
     rejected_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class JobChunk(Base):

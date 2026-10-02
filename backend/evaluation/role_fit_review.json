@@ -1,0 +1,23 @@
+[
+  {
+    "id": "evidence-depth-beats-keyword-list",
+    "role_family": "software",
+    "review_question": "Should verified implementation evidence outrank an unverified skills-list match?",
+    "expected_answer": true,
+    "review_status": "labelled"
+  },
+  {
+    "id": "missing-required-capability-is-visible",
+    "role_family": "data-engineer",
+    "review_question": "Does a missing required pipeline capability remain a priority gap even when optional tools match?",
+    "expected_answer": true,
+    "review_status": "labelled"
+  },
+  {
+    "id": "eligibility-excluded-from-skill-score",
+    "role_family": "cloud-devops",
+    "review_question": "Are citizenship and work-right conditions shown separately from capability scoring?",
+    "expected_answer": true,
+    "review_status": "labelled"
+  }
+]

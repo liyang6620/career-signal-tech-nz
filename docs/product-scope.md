@@ -39,7 +39,7 @@ The MVP activates Software Engineer, Data Analyst / BI Analyst, Data Engineer / 
 | Module | Responsibility |
 | --- | --- |
 | Tech Market Explorer | Explore New Zealand roles, locations, industries and skill trends |
-| Role Decoder | Classify a job from responsibilities and requirements rather than title alone |
+| Role Decoder | Build a JD capability profile, report independent role-family proximity, identify mixed or out-of-scope adverts, and surface application eligibility conditions separately from skill matching |
 | Career Path Map | Show capability distance and transition paths between technology roles |
 | Candidate Evidence Graph | Extract and review evidence from CVs, GitHub and projects |
 | Job Fit Explorer | Compare documented evidence with a role family or job without an opaque ATS score |
@@ -73,6 +73,17 @@ Technologies can support several capabilities. For example, Playwright can provi
 
 Repository dependency detection alone must not produce a mastery claim.
 
+User-facing comparisons retain these levels as secondary semantic labels and use two independently calculated
+0-100 scores as the primary display. Candidate evidence maturity uses a non-linear level baseline, extraction
+confidence, independent-source corroboration and source-type diversity. JD capability priority uses explicit mention,
+repetition, requirement language and title context. Radar axes come from the supplied advert rather than a fixed
+role-family template. Every component is returned for audit,
+and the candidate score is explicitly described as strength of available proof rather than personal ability.
+
+GitHub extraction uses repository metadata, implementation file structure, dependency manifests, test files,
+container configuration and CI workflows. A README mention supports usage evidence; implementation or verification
+levels require corresponding repository artifacts.
+
 ## Retrieval
 
 Hybrid retrieval applies structured filters for role family, geography, seniority and date, then combines PostgreSQL full-text search, pgvector semantic retrieval and reranking. OpenAI explains the retrieved evidence and returns citations; it does not invent market statistics or final scores.
@@ -83,3 +94,11 @@ Hybrid retrieval applies structured filters for role family, geography, seniorit
 2. Expand software specialisations and platform engineering.
 3. Add Quality Engineering, IT and Systems, and Business Technology.
 4. Add adjacent Product, UX and Security classifications.
+
+## Current workflow status
+
+The application portfolio is persistent: users can save a sourced opportunity from employer evidence, inspect its
+current evidence coverage and priority gaps, create a development plan linked to that role, track preparation and
+application stages, and return to the pipeline after signing out. Role Decoder outputs are stored as user-owned analysis
+history. Aggregate, content-free product events support beta usage analysis. Reminders and longitudinal outcome
+analytics remain later work.

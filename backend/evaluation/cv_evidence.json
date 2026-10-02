@@ -1,0 +1,26 @@
+[
+  {
+    "id": "implemented-api-with-tests",
+    "text": "Projects\n- Built a FastAPI REST API with PostgreSQL and Docker; added automated testing, including integration tests, and deployed the service.",
+    "expected_skills": ["FastAPI", "REST APIs", "PostgreSQL", "Docker", "Automated Testing"],
+    "minimum_levels": {"FastAPI": 3, "Automated Testing": 3, "Docker": 3}
+  },
+  {
+    "id": "skills-list-is-claim-only",
+    "text": "Technical Skills\nPython, SQL, AWS, Kubernetes, Terraform",
+    "expected_skills": ["Python", "SQL", "AWS", "Kubernetes", "Terraform"],
+    "maximum_level": 1
+  },
+  {
+    "id": "verified-analytics-project",
+    "text": "Selected Projects\n- Designed a Power BI dashboard backed by dbt and SQL models; added data quality checks and reduced refresh failures by 35%.",
+    "expected_skills": ["Power BI", "dbt", "SQL", "Data Quality"],
+    "minimum_levels": {"Power BI": 4, "dbt": 4, "Data Quality": 4}
+  },
+  {
+    "id": "github-link-is-not-git-proof",
+    "text": "Portfolio\nGitHub: https://github.com/example",
+    "expected_skills": [],
+    "forbidden_above_level": {"Git": 1}
+  }
+]

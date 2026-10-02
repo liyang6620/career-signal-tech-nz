@@ -3,8 +3,16 @@ import smtplib
 from email.message import EmailMessage
 
 from .config import get_settings
+from .models import EmailOutbox
 
 logger = logging.getLogger(__name__)
+
+
+def enqueue_email(db, recipient: str, subject: str, body: str) -> EmailOutbox:
+    """Persist delivery intent in the same transaction as the user action."""
+    message = EmailOutbox(recipient=recipient, subject=subject, body=body)
+    db.add(message)
+    return message
 
 
 def send_email(recipient: str, subject: str, body: str) -> None:

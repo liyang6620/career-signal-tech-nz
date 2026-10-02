@@ -119,6 +119,20 @@ class UploadResponse(BaseModel):
     status: str
     failure_reason: str | None
     created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ProcessingJobResponse(BaseModel):
+    id: UUID
+    upload_id: UUID
+    job_type: str
+    status: str
+    attempts: int
+    last_error: str | None
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -182,8 +196,21 @@ class RoleFitContribution(BaseModel):
     weight: float
     required: bool
     evidence_level: int
+    evidence_confidence: float
+    source_count: int
+    source_type_count: int
+    base_score: float
+    confidence_adjustment: float
+    specificity_bonus: float = 0
+    verification_bonus: float = 0
+    outcome_bonus: float = 0
+    corroboration_bonus: float
+    diversity_bonus: float
+    score_factors: list[str] = Field(default_factory=list)
     normalized_score: float
     weighted_score: float
+    market_frequency: float = 0
+    market_mention_count: int = 0
 
 
 class RoleFitResponse(BaseModel):
@@ -193,10 +220,14 @@ class RoleFitResponse(BaseModel):
     evidence_depth: float
     cap_applied: bool
     contributions: list[RoleFitContribution]
+    benchmark_sources: list[dict[str, str]] = Field(default_factory=list)
+    benchmark_methodology: str = "Transparent occupational prior calibrated with indexed job-posting signals."
+    market_posting_count: int = 0
 
 
 class GithubProjectRequest(BaseModel):
     url: HttpUrl
+
 
 class GithubRepositoryCandidateResponse(BaseModel):
     name: str
@@ -264,7 +295,7 @@ class ProfileResponse(BaseModel):
 
 
 class RoleDecodeRequest(BaseModel):
-    title: str = Field(min_length=2, max_length=240)
+    title: str = Field(default="", max_length=240)
     description: str = Field(min_length=40, max_length=50_000)
 
 
@@ -274,18 +305,68 @@ class DecodedSkill(BaseModel):
     mention_count: int
 
 
+class DecodedSkillDemand(BaseModel):
+    slug: str
+    name: str
+    required: bool
+    importance: Literal["essential", "named", "supporting"]
+    role_families: list[str]
+    mention_count: int
+    demand_score: float
+    explicit_mention: float
+    repetition_signal: float
+    requirement_signal: float
+    title_signal: float
+    evidence_level: int
+    evidence_score: float
+    evidence_confidence: float
+    source_count: int
+    source_type_count: int
+    evidence_base_score: float
+    confidence_adjustment: float
+    specificity_bonus: float = 0
+    verification_bonus: float = 0
+    outcome_bonus: float = 0
+    corroboration_bonus: float
+    diversity_bonus: float
+    score_factors: list[str] = Field(default_factory=list)
+
+
+class RoleFamilyMatch(BaseModel):
+    role_family: str
+    role_label: str
+    match_score: float
+
+
+class EligibilityRequirementResponse(BaseModel):
+    category: str
+    label: str
+    importance: Literal["required", "stated", "preferred"]
+    excerpt: str
+
+
 class RoleDecodeResponse(BaseModel):
+    analysis_id: UUID | None = None
     role_family: str
     role_label: str
     confidence: float
     seniority: str
+    scope_status: Literal["matched", "mixed", "adjacent", "out_of_scope"]
+    taxonomy_coverage: float
     matched_skills: list[DecodedSkill]
+    skill_demands: list[DecodedSkillDemand]
+    role_matches: list[RoleFamilyMatch]
+    unmapped_skills: list[str]
+    eligibility_requirements: list[EligibilityRequirementResponse]
     alternatives: list[dict[str, str | float]]
 
 
 class MarketSourceInput(BaseModel):
     name: str = Field(min_length=2, max_length=160)
-    source_type: Literal["company-careers", "greenhouse", "lever", "licensed-dataset", "manual-permitted"]
+    source_type: Literal[
+        "company-careers", "greenhouse", "lever", "ashby", "smartrecruiters", "workday", "workable",
+        "licensed-dataset", "manual-permitted",
+    ]
     permission_basis: str = Field(min_length=10, max_length=1000)
     base_url: HttpUrl
 
@@ -306,17 +387,27 @@ class MarketImportRequest(BaseModel):
 
 class MarketSummaryResponse(BaseModel):
     posting_count: int
+    source_count: int
+    latest_retrieved_at: datetime | None
     roles: list[dict[str, str | int]]
+    seniority: list[dict[str, str | int]]
+    role_seniority: list[dict[str, str | int]]
     top_skills: list[dict[str, str | int]]
+    role_skills: list[dict[str, str | int]]
     locations: list[dict[str, str | int]]
+    role_locations: list[dict[str, str | int]]
 
 
 class CollectorSourceRequest(BaseModel):
     name: str = Field(min_length=2, max_length=160)
-    adapter: Literal["greenhouse", "lever", "schema-org"]
+    adapter: Literal[
+        "greenhouse", "lever", "ashby", "smartrecruiters", "workday", "workable", "schema-org",
+    ]
     identifier: str = Field(min_length=1, max_length=2000)
     company: str = Field(min_length=1, max_length=180)
     permission_basis: str = Field(min_length=10, max_length=1000)
+    refresh_interval_minutes: int = Field(default=1440, ge=60, le=10_080)
+    minimum_interval_seconds: int = Field(default=60, ge=30, le=3600)
 
 
 class CollectorSourceResponse(BaseModel):
@@ -327,7 +418,112 @@ class CollectorSourceResponse(BaseModel):
     company: str
     permission_basis: str
     enabled: bool
+    refresh_interval_minutes: int
+    minimum_interval_seconds: int
+    next_run_at: datetime
+    last_enqueued_at: datetime | None
     created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SavedJobCreateRequest(BaseModel):
+    source_url: HttpUrl | None = None
+    title: str = Field(min_length=2, max_length=240)
+    company: str = Field(min_length=1, max_length=180)
+    location: str = Field(min_length=1, max_length=120)
+    role_family: str | None = Field(default=None, max_length=80)
+    description: str | None = Field(default=None, max_length=50_000)
+    analysis_id: UUID | None = None
+
+
+class SavedJobFromAnalysisRequest(BaseModel):
+    company: str = Field(default="Employer not specified", min_length=1, max_length=180)
+    location: str = Field(default="New Zealand", min_length=1, max_length=120)
+    notes: str | None = Field(default=None, max_length=5_000)
+
+
+class SavedJobUpdateRequest(BaseModel):
+    status: Literal["saved", "preparing", "applied", "interview", "offer", "rejected", "archived"] | None = None
+    notes: str | None = Field(default=None, max_length=5_000)
+
+
+class SavedJobResponse(BaseModel):
+    id: UUID
+    analysis_id: UUID | None
+    source_url: str
+    title: str
+    company: str
+    location: str
+    role_family: str | None
+    description: str | None
+    status: str
+    notes: str | None
+    evidenced_skill_count: int = 0
+    skill_count: int = 0
+    top_gaps: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class JobAnalysisSummaryResponse(BaseModel):
+    id: UUID
+    title: str
+    role_family: str
+    scope_status: str
+    confidence: float
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class JobAnalysisDetailResponse(BaseModel):
+    id: UUID
+    title: str
+    description: str
+    role_family: str
+    scope_status: str
+    confidence: float
+    created_at: datetime
+    result: RoleDecodeResponse
+
+
+class JobStatusEventResponse(BaseModel):
+    id: UUID
+    from_status: str | None
+    to_status: str
+    changed_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DevelopmentPlanGenerateRequest(BaseModel):
+    role_family: Literal["software", "data-analyst", "data-engineer", "ai", "cloud-devops"]
+    replace: bool = False
+    saved_job_id: UUID | None = None
+
+
+class DevelopmentPlanTaskUpdateRequest(BaseModel):
+    status: Literal["pending", "in_progress", "completed"]
+
+
+class DevelopmentPlanTaskResponse(BaseModel):
+    id: UUID
+    saved_job_id: UUID | None
+    role_family: str
+    skill_slug: str | None
+    stage: str
+    position: int
+    due_week: int
+    title: str
+    description: str
+    deliverable: str
+    status: str
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -336,6 +532,9 @@ class CollectorRunResponse(BaseModel):
     id: UUID
     collector_source_id: UUID
     status: str
+    attempts: int
+    available_at: datetime
+    locked_at: datetime | None
     fetched_count: int
     accepted_count: int
     rejected_count: int
@@ -348,12 +547,17 @@ class CollectorRunResponse(BaseModel):
 
 class MarketQualityResponse(BaseModel):
     posting_count: int
+    active_source_count: int
+    latest_retrieved_at: datetime | None
+    graduate_junior_count: int
+    normalised_location_count: int
     missing_publication_date_percent: float
     low_confidence_count: int
     stale_posting_count: int
     duplicate_url_count: int
     collector_completed_count: int
     collector_failed_count: int
+    sample_warnings: list[str]
     sources: list[dict[str, str | int | bool | None]]
 
 
