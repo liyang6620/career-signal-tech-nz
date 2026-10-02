@@ -121,7 +121,10 @@ ROLE_REQUIREMENTS: dict[str, tuple[tuple[str, float, bool], ...]] = {
 # applied by the evidence-fit endpoint when enough indexed postings exist.
 ROLE_BENCHMARK_SOURCES: dict[str, dict[str, object]] = {
     "software": {
-        "occupations": ("O*NET 15-1252 Software Developers", "O*NET 15-1253 Software Quality Assurance Analysts and Testers"),
+        "occupations": (
+            "O*NET 15-1252 Software Developers",
+            "O*NET 15-1253 Software Quality Assurance Analysts and Testers",
+        ),
         "sources": (
             {"name": "O*NET Software Developers", "url": "https://www.onetonline.org/link/summary/15-1252.00"},
             {"name": "O*NET QA Analysts and Testers", "url": "https://www.onetonline.org/link/summary/15-1253.00"},
@@ -153,7 +156,10 @@ ROLE_BENCHMARK_SOURCES: dict[str, dict[str, object]] = {
         ),
     },
     "cloud-devops": {
-        "occupations": ("O*NET 15-1244 Network and Computer Systems Administrators", "O*NET 15-1248 Computer Network Support Specialists"),
+        "occupations": (
+            "O*NET 15-1244 Network and Computer Systems Administrators",
+            "O*NET 15-1248 Computer Network Support Specialists",
+        ),
         "sources": (
             {"name": "O*NET Network and Computer Systems Administrators", "url": "https://www.onetonline.org/link/summary/15-1244.00"},
             {"name": "O*NET Network Support Specialists", "url": "https://www.onetonline.org/link/summary/15-1248.00"},
