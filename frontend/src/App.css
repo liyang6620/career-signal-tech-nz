@@ -3061,13 +3061,15 @@ body { background: var(--canvas); color: var(--ink); }
 .jobs-decision-factors > header { padding: 18px 22px 14px; border-bottom: 1px solid var(--line-soft); }
 .jobs-decision-factors h2 { margin: 5px 0 0; font-family: var(--serif); font-size: 20px; font-weight: 500; }
 .jobs-decision-factors header p { max-width: 720px; margin: 6px 0 0; color: var(--muted); font-size: 12px; }
-.jobs-decision-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.jobs-decision-grid article { padding: 16px 20px; border-right: 1px solid var(--line-soft); }
-.jobs-decision-grid article:last-child { border-right: 0; }
-.jobs-decision-grid h3 { margin: 0 0 12px; font-size: 14px; }
-.jobs-decision-grid dl { display: flex; justify-content: space-between; gap: 12px; margin: 7px 0; font-size: 12px; }
-.jobs-decision-grid dt { color: var(--soft); }
-.jobs-decision-grid dd { margin: 0; color: var(--ink); font-weight: 700; text-align: right; }
+.jobs-decision-table { overflow-x: auto; }
+.jobs-decision-row { display: grid; grid-template-columns: minmax(130px, .65fr) repeat(3, minmax(190px, 1fr)); min-width: 600px; }
+.jobs-decision-row > * { min-width: 0; padding: 12px 16px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); font-size: 12px; line-height: 1.4; }
+.jobs-decision-row > *:last-child { border-right: 0; }
+.jobs-decision-row > strong { color: var(--soft); font-size: 11px; font-weight: 750; }
+.jobs-decision-row > span { color: var(--ink); font-weight: 650; }
+.jobs-decision-head { background: #f4f8f6; }
+.jobs-decision-head > span { color: var(--ink); font-size: 12px; font-weight: 750; }
+.jobs-decision-factors > .jobs-comparison-warning { margin: 0; padding: 12px 16px 15px; }
 .jobs-comparison-warning { margin: 14px 0 0; color: #80672e; font-size: 11px; line-height: 1.4; }
 .job-compare-toggle { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 7px; color: var(--accent); font-size: 11px; font-weight: 700; }
 .job-compare-toggle input { accent-color: var(--accent); }

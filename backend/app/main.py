@@ -1293,8 +1293,16 @@ def comparison_skill_demands(role_family: str, skill_demands: list[dict]) -> tup
 
 def saved_job_comparison_facts(job: SavedJob) -> list[dict[str, str]]:
     text = " ".join(part for part in (job.title, job.description or "") if part)
-    facts: list[dict[str, str]] = [{"label": "Location", "value": job.location, "source": "saved record"}]
-    salary = re.search(r"NZ\$\s?[\d,]+(?:\s*[–-]\s*NZ?\$?\s?[\d,]+)?(?:\s+per\s+(?:year|annum))?", text, re.I)
+    employer = job.company
+    if employer.strip().lower() in {"employer not specified", "unknown employer"}:
+        match = re.match(r"\s*([^.!?]+?)\s+is hiring\b", job.description or "", re.I)
+        if match:
+            employer = match.group(1).strip()
+    facts: list[dict[str, str]] = [
+        {"label": "Employer", "value": employer, "source": "advertisement text" if employer != job.company else "saved record"},
+        {"label": "Location", "value": job.location, "source": "saved record"},
+    ]
+    salary = re.search(r"NZ\$\s?[\d,]+(?:\s*[–-]\s*(?:NZ\s*)?\$\s?[\d,]+)?(?:\s+per\s+(?:year|annum))?", text, re.I)
     if salary:
         facts.append({"label": "Compensation", "value": salary.group(0), "source": "advertisement text"})
     if re.search(r"hybrid", text, re.I):
@@ -1310,6 +1318,15 @@ def saved_job_comparison_facts(job: SavedJob) -> list[dict[str, str]]:
         facts.append({"label": "Engagement", "value": contract, "source": "advertisement text"})
     elif re.search(r"part[- ]time", text, re.I):
         facts.append({"label": "Engagement", "value": "Part-time", "source": "advertisement text"})
+    signal = None
+    if re.search(r"digital transformation", text, re.I) and re.search(r"integrat", text, re.I):
+        signal = "Digital transformation and integration delivery"
+    elif re.search(r"integrat", text, re.I):
+        signal = "Integration delivery"
+    elif re.search(r"growth phase|ownership|influence", text, re.I):
+        signal = "Growth-stage ownership and influence"
+    if signal:
+        facts.append({"label": "Advert signal", "value": signal, "source": "advertisement text"})
     return facts
 
 
@@ -1346,7 +1363,13 @@ def saved_job_response(db: Session, job: SavedJob) -> SavedJobResponse:
         ),
         key=lambda item: (item[0], item[1], item[2], item[3]),
     )
+    response_company = job.company
+    if response_company.strip().lower() in {"employer not specified", "unknown employer"}:
+        employer_fact = next((fact for fact in saved_job_comparison_facts(job) if fact["label"] == "Employer"), None)
+        if employer_fact:
+            response_company = employer_fact["value"]
     return SavedJobResponse.model_validate(job).model_copy(update={
+        "company": response_company,
         "evidenced_skill_count": evidenced_count,
         "skill_count": len(slugs),
         "top_gaps": [item[3] for item in ranked_gaps[:3]],
