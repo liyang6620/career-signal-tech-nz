@@ -48,6 +48,7 @@ CV + GitHub -> evidence extraction -> evidence store +------> scoring engine
 - The database retains the parser version, a SHA-256 text fingerprint, document metrics and short source excerpts, not a second full-text CV copy.
 - Versioned deterministic aliases generate initial skill suggestions with a source locator, confidence and conservative evidence level.
 - Suggestions remain `pending` until the document owner explicitly confirms or rejects every item.
+- Uploads retain an optional version label and target role, allowing multiple tailored CVs to share one confirmed evidence graph.
 - Confirmed suggestions are reviewable evidence inputs, not claims of mastery. OCR and semantic inference remain future stages.
 
 ## Public project evidence
@@ -99,7 +100,7 @@ available for aggregate assessments, with `65% coverage + 35% evidence depth` an
 
 ## RAG design
 
-PostgreSQL is the system of record and pgvector supports semantic retrieval. Governed job descriptions are split into bounded overlapping chunks and embedded locally with `BAAI/bge-small-en-v1.5`; posting content hashes and model identifiers make indexing incremental and auditable. The model cache persists independently of API containers.
+PostgreSQL is the system of record and pgvector supports semantic retrieval. Governed job descriptions are split into bounded overlapping chunks and embedded locally with `BAAI/bge-small-en`; `EMBEDDING_MODE=semantic` is the default and an explicit `hash` mode remains available for offline tests. If the model cannot be downloaded, indexing logs the lexical fallback and can be re-run after connectivity is restored. Posting content hashes and model identifiers make indexing incremental and auditable. The model cache persists independently of API containers.
 
 Retrieval filters first by role family, location, seniority and publication window. PostgreSQL English full-text search and pgvector cosine search each produce a ranked candidate list, then reciprocal-rank fusion combines them without model-generated relevance scores. Results expose the original posting URL, excerpt, publication date and deterministic citation label. OpenAI may later explain these retrieved citations with typed outputs, but is not part of indexing, retrieval or scoring.
 

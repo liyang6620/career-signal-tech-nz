@@ -790,7 +790,8 @@ body { font-size: 15px; line-height: 1.5; }
 .personal-graph-orbit { fill: none; stroke: #b6c6c2; stroke-width: 1; stroke-dasharray: 2 6; }
 .personal-graph-link { stroke: #a7bbb6; stroke-width: 1.2; }
 .personal-graph-node { fill: #d9ad5e; stroke: #fff; stroke-width: 2; }
-.personal-graph-label { fill: var(--muted); font-size: 10px; font-weight: 700; }
+.personal-graph-label { display: none; }
+.personal-graph-node-index { fill: #fff; font-family: var(--font-data); font-size: 11px; font-weight: 700; }
 .personal-graph-core { fill: #183336; stroke: #d9ad5e; stroke-width: 2; }
 .personal-graph-core-label { fill: #f8faf8; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
 .personal-graph-core-count { fill: #bcd0c9; font-family: var(--font-data); font-size: 10px; }
@@ -801,7 +802,8 @@ body { font-size: 15px; line-height: 1.5; }
 .personal-graph-register > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
 .personal-graph-register > div span { min-width: 0; }
 .personal-graph-register b, .personal-graph-register small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.personal-graph-register b { color: var(--ink); font-size: 12px; }
+.personal-graph-register b { display: flex; align-items: center; gap: 7px; color: var(--ink); font-size: 12px; }
+.personal-graph-register b em { display: inline-grid; width: 18px; height: 18px; place-items: center; flex: none; border: 1px solid #c9d6d2; border-radius: 50%; color: var(--accent); font-family: var(--font-data); font-size: 10px; font-style: normal; font-weight: 600; }
 .personal-graph-register small { margin-top: 3px; color: var(--soft); font-size: 10px; }
 .personal-graph-register > div > strong { color: var(--accent); font-family: var(--font-data); font-size: 11px; font-weight: 500; }
 .personal-graph-more { display: block; margin-top: 12px; color: var(--soft); font-size: 10px; line-height: 1.45; }
@@ -955,6 +957,10 @@ body { font-size: 15px; line-height: 1.5; }
 
 /* Product workflow additions: compact, operational controls rather than dashboard decoration. */
 .nav-count { margin-left: auto; min-width: 20px; padding: 2px 6px; border-radius: 999px; background: var(--accent); color: white; font-size: 10px; text-align: center; }
+.cv-version-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0 0 52px; }
+.cv-version-list { display: grid; gap: 5px; margin: 10px 0 0 52px; color: var(--soft); font-size: 12px; }
+.cv-version-list strong { color: var(--ink); font-size: 12px; }
+@media (max-width: 680px) { .cv-version-fields { grid-template-columns: 1fr; margin-left: 0; } .cv-version-list { margin-left: 0; } }
 .citation-save { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #c9d6d2; background: #fff; color: var(--ink); padding: 5px 8px; font: inherit; font-size: 12px; cursor: pointer; }
 .citation-save:hover:not(:disabled), .citation-save:focus-visible { border-color: var(--accent); color: var(--accent); }
 .citation-save:disabled { color: var(--positive); background: #eef7f2; cursor: default; }
@@ -2972,4 +2978,168 @@ body { background: var(--canvas); color: var(--ink); }
 @media (max-width: 700px) {
   .topbar-signout { margin-left: auto; padding: 5px 7px; font-size: 12px; }
   .topbar-signout svg { display: none; }
+}
+
+/* Role decoder: make the proximity result a readable comparison surface. */
+.role-match-panel { display: block; padding: 20px 22px 21px; background: #f7faf8; }
+.role-match-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--line-soft); }
+.role-match-panel > header h3 { margin: 5px 0 0; color: var(--ink); font-size: 19px; }
+.role-match-panel > header p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.role-match-count { flex: none; color: var(--soft); font-size: 12px; }
+.role-match-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 12px; padding-top: 15px; }
+.role-match-item { min-width: 0; padding: 12px 13px; border: 1px solid var(--line); background: #fff; }
+.role-match-item.leading { border-color: #9dbab3; box-shadow: inset 3px 0 0 var(--accent); }
+.role-match-item-head { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 8px; align-items: center; min-width: 0; }
+.role-match-rank { color: var(--soft); font-family: var(--font-data); font-size: 11px; }
+.role-match-item-head svg { color: var(--accent); }
+.role-match-item-head strong { min-width: 0; overflow: hidden; color: var(--ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.role-match-item-head > span:last-child { color: var(--soft); font-size: 10px; white-space: nowrap; }
+.role-match-meter { display: grid; grid-template-columns: minmax(0, 1fr) 38px; gap: 9px; align-items: center; margin-top: 12px; }
+.role-match-meter i { display: block; height: 8px; overflow: hidden; border-radius: 999px; background: #e4ece9; }
+.role-match-meter u { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7aa79d, var(--accent)); text-decoration: none; }
+.role-match-meter b { color: var(--ink); font-family: var(--font-data); font-size: 12px; font-weight: 600; text-align: right; }
+.role-match-panel .scope-note { margin-top: 15px; }
+
+/* Profile network: keep the radial view bounded and let role families act as filters. */
+.personal-graph-frame > header { align-items: flex-start; }
+.profile-filter-note { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
+.profile-role-filter { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; max-width: 560px; }
+.profile-role-filter button { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 6px 9px; border: 1px solid var(--line); background: #fff; color: var(--muted); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.profile-role-filter button:hover, .profile-role-filter button.active { border-color: #9dbab3; background: var(--accent-soft); color: var(--accent-dark); }
+.profile-role-filter button.active { box-shadow: inset 0 -2px 0 var(--accent); }
+.personal-evidence-graph { min-height: 320px; }
+.personal-graph-label { font-size: 11px; }
+.personal-graph-callout-line { stroke: #a7bbb6; stroke-width: 1; }
+.personal-graph-callout-box { fill: rgba(255, 255, 255, .96); stroke: #d7e2de; }
+.personal-graph-callout-text { fill: var(--ink); font-size: 11px; font-weight: 700; }
+
+/* Role-family loading has an explicit recovery state instead of an endless spinner. */
+.alignment-loading { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 180px; padding: 24px; color: var(--muted); font-size: 13px; }
+.alignment-loading .text-button { margin-left: 5px; padding: 0; }
+
+/* Applications: compare saved analyses without leaving the decision workflow. */
+.jobs-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.jobs-compare-panel { margin: 18px 0; border: 1px solid #aac1bb; background: #f5faf8; }
+.jobs-compare-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 19px 22px 15px; border-bottom: 1px solid #d9e7e2; }
+.jobs-compare-panel h2 { margin: 5px 0 0; color: var(--ink); font-size: 19px; }
+.jobs-compare-panel p { max-width: 680px; margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.jobs-compare-count { flex: none; color: var(--accent); font-family: var(--font-data); font-size: 12px; font-weight: 700; }
+.jobs-compare-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 15px 17px 17px; }
+.jobs-compare-grid article { min-width: 0; padding: 14px; border: 1px solid var(--line); background: #fff; }
+.jobs-compare-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--soft); font-size: 10px; font-weight: 750; }
+.jobs-compare-card-head button { display: grid; place-items: center; padding: 2px; border: 0; background: transparent; color: var(--soft); cursor: pointer; }
+.jobs-compare-grid h3 { margin: 9px 0 3px; color: var(--ink); font-size: 15px; line-height: 1.3; }
+.jobs-compare-grid article > p { margin: 0; font-size: 12px; }
+.jobs-compare-readiness { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: baseline; margin-top: 15px; }
+.jobs-compare-readiness strong { color: var(--ink); font-family: var(--font-data); font-size: 22px; font-weight: 500; }
+.jobs-compare-readiness > span { color: var(--soft); font-size: 11px; }
+.jobs-compare-readiness i { grid-column: 1 / -1; display: block; height: 7px; overflow: hidden; margin-top: 3px; border-radius: 999px; background: #e4ece9; }
+.jobs-compare-readiness u { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7aa79d, var(--accent)); text-decoration: none; }
+.jobs-compare-grid article > small { display: block; min-height: 33px; margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.jobs-compare-grid .text-button { margin-top: 13px; padding: 0; }
+.jobs-compare-empty { display: flex; align-items: center; gap: 9px; padding: 18px 22px 20px; color: var(--muted); font-size: 13px; }
+.jobs-compare-requirements { display: grid; gap: 6px; margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.jobs-compare-requirements > span { color: var(--soft); font-size: 10px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.jobs-compare-requirements > b { display: flex; justify-content: space-between; gap: 8px; color: var(--ink); font-size: 12px; font-weight: 700; }
+.jobs-compare-requirements > b small { flex: none; color: var(--soft); font-family: var(--font-data); font-size: 10px; font-weight: 600; }
+.jobs-compare-matrix { padding: 0 17px 19px; border-top: 1px solid #d9e7e2; }
+.jobs-compare-matrix > header { display: flex; align-items: baseline; justify-content: space-between; gap: 15px; padding: 16px 5px 11px; }
+.jobs-compare-matrix h3 { margin: 5px 0 0; color: var(--ink); font-size: 16px; }
+.jobs-compare-matrix > header small { color: var(--soft); font-size: 11px; }
+.jobs-compare-matrix-table { overflow-x: auto; border: 1px solid var(--line); background: #fff; }
+.jobs-compare-matrix-head, .jobs-compare-matrix-row { display: grid; grid-template-columns: minmax(150px, 1.1fr) repeat(3, minmax(145px, 1fr)); min-width: 590px; }
+.jobs-compare-matrix-head { background: #f4f8f6; color: var(--soft); font-size: 10px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.jobs-compare-matrix-head > *, .jobs-compare-matrix-row > * { min-width: 0; padding: 10px 12px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.jobs-compare-matrix-head > *:last-child, .jobs-compare-matrix-row > *:last-child { border-right: 0; }
+.jobs-compare-matrix-row:last-child > * { border-bottom: 0; }
+.jobs-compare-matrix-row > strong { color: var(--ink); font-size: 12px; }
+.jobs-compare-matrix-row > span { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.jobs-compare-matrix-row > span.present { color: var(--accent-dark); font-weight: 700; }
+.jobs-compare-matrix-row > span.absent { color: #9aa9a5; }
+.jobs-compare-state { display: flex; align-items: center; gap: 8px; padding: 0 22px 17px; color: var(--muted); font-size: 12px; }
+.job-compare-toggle { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 7px; color: var(--accent); font-size: 11px; font-weight: 700; }
+.job-compare-toggle input { accent-color: var(--accent); }
+
+/* Pathway: a decision planner with an explicit baseline, route choice and action. */
+.pathway-planner { margin-top: 24px; border: 1px solid var(--line); background: var(--surface); }
+.pathway-planner-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 24px 27px 21px; border-bottom: 1px solid var(--line); background: #f7faf8; }
+.pathway-planner-head h2 { margin: 6px 0 0; color: var(--ink); font-size: 24px; }
+.pathway-planner-head p { max-width: 650px; margin: 7px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.pathway-baseline-metrics { display: flex; flex: none; gap: 23px; padding-left: 22px; border-left: 1px solid var(--line); }
+.pathway-baseline-metrics span, .pathway-baseline-metrics small, .pathway-baseline-metrics strong { display: block; }
+.pathway-baseline-metrics small { color: var(--soft); font-size: 11px; }
+.pathway-baseline-metrics strong { margin-top: 6px; color: var(--ink); font-family: var(--font-data); font-size: 25px; font-weight: 500; }
+.pathway-step-label { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 21px 27px 13px; }
+.pathway-step-label > span { color: var(--ink); font-size: 14px; font-weight: 750; }
+.pathway-step-label > small { color: var(--soft); font-size: 12px; }
+.pathway-route-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0 27px 23px; }
+.pathway-route-card { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px 10px; align-items: center; min-width: 0; padding: 15px; border: 1px solid var(--line); background: #fff; color: var(--ink); text-align: left; cursor: pointer; }
+.pathway-route-card:hover, .pathway-route-card.active { border-color: #9dbab3; background: #f2f8f5; }
+.pathway-route-card.active { box-shadow: inset 0 -3px 0 var(--accent); }
+.pathway-route-number { color: var(--soft); font-family: var(--font-data); font-size: 11px; }
+.pathway-route-card .pathway-role-icon { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #b8c9c5; border-radius: 50%; color: var(--accent); }
+.pathway-route-card strong { min-width: 0; font-size: 14px; line-height: 1.25; }
+.pathway-route-card > small { grid-column: 2 / -1; color: var(--muted); font-size: 11px; }
+.pathway-route-meta { grid-column: 2 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--accent); font-size: 11px; font-weight: 700; }
+.pathway-route-detail { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(250px, .9fr); gap: 25px; padding: 22px 27px 25px; border-top: 1px solid var(--line); }
+.pathway-route-detail h2 { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; color: var(--ink); font-size: 22px; }
+.pathway-route-detail h2 svg { color: var(--accent); }
+.pathway-route-detail > div:first-child > p { max-width: 620px; margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.pathway-detail-metrics { display: flex; flex-wrap: wrap; gap: 27px; margin-top: 18px; }
+.pathway-detail-metrics small, .pathway-detail-metrics strong { display: block; }
+.pathway-detail-metrics small { color: var(--soft); font-size: 11px; }
+.pathway-detail-metrics strong { margin-top: 5px; color: var(--ink); font-family: var(--font-data); font-size: 22px; font-weight: 500; }
+.pathway-detail-metrics em { margin-left: 3px; color: var(--soft); font-size: 11px; font-style: normal; }
+.pathway-proof-list { padding-left: 21px; border-left: 1px solid var(--line); }
+.pathway-proof-list > span { color: var(--ink); font-size: 12px; font-weight: 750; }
+.pathway-proof-list > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+.pathway-proof-list b, .pathway-proof-list small { display: block; }
+.pathway-proof-list b { color: var(--ink); font-size: 13px; }
+.pathway-proof-list small { margin-top: 3px; color: var(--soft); font-size: 10px; }
+.pathway-proof-list svg { flex: none; color: var(--accent); }
+.pathway-proof-list p { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pathway-detail-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; padding-top: 3px; }
+.pathway-planner-footer { display: flex; align-items: flex-start; gap: 9px; padding: 15px 27px; border-top: 1px solid var(--line); background: var(--surface-subtle); color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pathway-planner-footer svg { flex: none; margin-top: 1px; color: var(--accent); }
+
+@media (max-width: 760px) {
+  .role-match-list, .jobs-compare-grid, .pathway-route-grid { grid-template-columns: 1fr; }
+  .role-match-panel > header, .jobs-compare-panel > header, .pathway-planner-head, .pathway-step-label { display: block; }
+  .role-match-count, .jobs-compare-count, .pathway-step-label > small { display: block; margin-top: 8px; }
+  .profile-graph-frame > header, .personal-graph-frame > header { display: block; }
+  .profile-role-filter { justify-content: flex-start; max-width: none; margin-top: 14px; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; }
+  .pathway-baseline-metrics { margin-top: 18px; padding: 14px 0 0; border-top: 1px solid var(--line); border-left: 0; }
+  .pathway-route-detail { grid-template-columns: 1fr; gap: 19px; padding-inline: 17px; }
+  .pathway-proof-list { padding-top: 17px; padding-left: 0; border-top: 1px solid var(--line); border-left: 0; }
+  .pathway-route-grid, .pathway-step-label, .pathway-planner-head { padding-inline: 17px; }
+  .pathway-planner-footer { padding-inline: 17px; }
+  .jobs-header-actions { justify-content: flex-start; margin-top: 13px; }
+  .jobs-compare-matrix > header { display: block; }
+  .jobs-compare-matrix > header small { display: block; margin-top: 6px; }
+}
+
+/* Product reading and progress treatment: make the workspace easier to scan
+   while keeping evidence scores factual and emotionally neutral. */
+.brief-heading p { max-width: 860px; font-size: 17px; line-height: 1.55; }
+.brief-state { font-size: 13px; }
+.brief-context dt { font-size: 13px; }
+.brief-context dd { font-size: 15px; }
+.market-table-row i { height: 10px; border: 1px solid #d9e4e1; border-radius: 999px; background: #edf2f0; box-shadow: inset 0 1px 2px rgba(23, 38, 41, .08); }
+.market-table-row u { border-radius: inherit; background: linear-gradient(90deg, #0b6662, #3d958b); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22); }
+.role-alignment-card-score-label { color: var(--soft); font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.role-alignment-card-score.score-tone-starting { color: #80663a; }
+.role-alignment-card-score.score-tone-growing { color: var(--accent); }
+.role-alignment-card-score.score-tone-strong { color: #2f7657; }
+.role-alignment-card-meter { display: block; height: 7px; overflow: hidden; border: 1px solid #d9e4e1; border-radius: 999px; background: #edf2f0; }
+.role-alignment-card-meter i { display: block; height: 100%; }
+.role-alignment-card-meter u { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #5b8d82, #0b6662); text-decoration: none; }
+.alignment-radar-list header > div { min-width: 0; }
+.alignment-radar-list header > div > small { display: block; margin-top: 4px; color: var(--accent); font-size: 11px; font-weight: 700; }
+.alignment-score-note { margin: 12px 0 3px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+@media (max-width: 700px) {
+  .brief-heading p { font-size: 16px; }
+  .brief-context dt { font-size: 12px; }
+  .brief-context dd { font-size: 14px; }
+  .alignment-score-note { font-size: 12px; }
 }

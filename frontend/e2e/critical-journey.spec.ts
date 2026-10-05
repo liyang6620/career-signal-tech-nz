@@ -16,7 +16,10 @@ const fit = {
   coverage: 55,
   evidence_depth: 64,
   cap_applied: false,
-  contributions: [],
+  contributions: [
+    { skill_slug: "sql", skill_name: "SQL", weight: 1.6, required: true, evidence_level: 3, evidence_confidence: 0.9, source_count: 2, source_type_count: 2, normalized_score: 74, weighted_score: 74, market_frequency: 0, base_score: 70, confidence_adjustment: 4, corroboration_bonus: 0, diversity_bonus: 0, score_factors: [] },
+    { skill_slug: "python", skill_name: "Python", weight: 1.4, required: true, evidence_level: 2, evidence_confidence: 0.8, source_count: 2, source_type_count: 2, normalized_score: 58, weighted_score: 58, market_frequency: 0, base_score: 55, confidence_adjustment: 3, corroboration_bonus: 0, diversity_bonus: 0, score_factors: [] },
+  ],
 };
 const tasks = [
   {
@@ -67,7 +70,7 @@ async function mockAuthenticatedApi(page: Page) {
     if (path === "/api/v1/auth/refresh") return route.fulfill({ json: { access_token: "test-access-token", token_type: "bearer", user } });
     if (path === "/api/v1/profile") return route.fulfill({ json: profile });
     if (path === "/api/v1/evidence/uploads") return route.fulfill({ json: [] });
-    if (path === "/api/v1/evidence/graph") return route.fulfill({ json: { role_family: "data-engineer", evidence: [{ skill_slug: "sql", skill_name: "SQL", category: "data", evidence_level: 3, confidence: 0.9, excerpt: "Built a tested query workflow", locator: "README.md", source_type: "github" }, { skill_slug: "python", skill_name: "Python", category: "programming", evidence_level: 2, confidence: 0.8, excerpt: "Implemented a data pipeline", locator: "CV.pdf", source_type: "cv" }] } });
+    if (path === "/api/v1/evidence/graph") return route.fulfill({ json: { role_family: "data-engineer", evidence: [{ skill_slug: "sql", skill_name: "SQL", category: "data", evidence_level: 3, confidence: 0.9, excerpt: "Built a tested query workflow", locator: "README.md", source_type: "github" }, { skill_slug: "sql", skill_name: "SQL", category: "data", evidence_level: 2, confidence: 0.8, excerpt: "Used SQL in reporting", locator: "CV.pdf", source_type: "cv" }, { skill_slug: "python", skill_name: "Python", category: "programming", evidence_level: 2, confidence: 0.8, excerpt: "Implemented a data pipeline", locator: "CV.pdf", source_type: "cv" }, { skill_slug: "python", skill_name: "Python", category: "programming", evidence_level: 2, confidence: 0.7, excerpt: "Used Python in a project", locator: "README.md", source_type: "github" }] } });
     if (path === "/api/v1/evidence/fit") return route.fulfill({ json: fit });
     if (path === "/api/v1/jobs" && request.method() === "GET") return route.fulfill({ json: [savedJob] });
     if (path === `/api/v1/jobs/${savedJob.id}` && request.method() === "PATCH") {
@@ -129,6 +132,10 @@ test("personal capability profile shows evidence analysis", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Three views of evidence quality" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Why this profile is evidence-led" })).toBeVisible();
   await expect(page.getByRole("img", { name: "Personal evidence skill network" })).toBeVisible();
+  const evidenceRows = page.locator(".personal-graph-register > div");
+  await expect(evidenceRows).toHaveCount(2);
+  await expect(evidenceRows.filter({ hasText: "SQL" })).toHaveCount(1);
+  await expect(evidenceRows.filter({ hasText: "Python" })).toHaveCount(1);
   await expectNoSeriousAccessibilityViolations(page);
 });
 
@@ -155,9 +162,9 @@ test("career path rows remain readable across responsive layouts", async ({ page
   ]) {
     await page.setViewportSize(viewport);
     await page.goto("/app/pathways");
-    await expect(page.getByRole("heading", { name: "Routes from Data Engineer" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Plan the next evidence move" })).toBeVisible();
 
-    const rows = page.locator(".pathway-options article");
+    const rows = page.locator(".pathway-route-card");
     await expect(rows).toHaveCount(3);
     for (const row of await rows.all()) {
       const layout = await row.evaluate((element) => {

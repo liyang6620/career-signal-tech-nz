@@ -101,6 +101,8 @@ class UploadInitiateRequest(BaseModel):
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ]
     size: int = Field(gt=0)
+    cv_label: str | None = Field(default=None, max_length=160)
+    target_role: str | None = Field(default=None, max_length=80)
 
 
 class UploadInitiateResponse(BaseModel):
@@ -118,6 +120,8 @@ class UploadResponse(BaseModel):
     actual_size: int | None
     status: str
     failure_reason: str | None
+    cv_label: str | None
+    target_role: str | None
     created_at: datetime
     updated_at: datetime
 

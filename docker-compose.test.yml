@@ -1,0 +1,14 @@
+services:
+  backend-test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.test
+    environment:
+      DATABASE_URL: postgresql+psycopg://career_signal:career_signal@database:5432/career_signal
+      JWT_SECRET: test-secret-that-is-long-enough-for-tests
+      INGESTION_API_KEY: development-ingestion-key
+      EMBEDDING_MODE: hash
+    depends_on:
+      database:
+        condition: service_healthy
+    command: ["pytest", "-q"]

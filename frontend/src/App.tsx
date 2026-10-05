@@ -106,7 +106,7 @@ type RoleFit = { role_family: string; score: number; coverage: number; evidence_
 type RoleFitMap = Partial<Record<Exclude<RoleKey, "">, RoleFit>>;
 type SkillEvidence = { skill_slug: string; skill_name: string; category: string; evidence_level: number; confidence: number; excerpt: string; locator: string; source_type: string };
 type ProfileData = { id: string; location: string; seniority: string; role_family: Exclude<RoleKey, "">; evidence_sources: { id: string; source_type: string; source_reference: string; processing_status: string }[]; updated_at: string };
-type UploadRecord = { id: string; original_filename: string; status: string; failure_reason?: string | null; created_at: string };
+type UploadRecord = { id: string; original_filename: string; status: string; failure_reason?: string | null; cv_label?: string | null; target_role?: string | null; created_at: string };
 type SkillDemand = { slug: string; name: string; required: boolean; importance: "essential" | "named" | "supporting"; role_families: string[]; mention_count: number; demand_score: number; explicit_mention: number; repetition_signal: number; requirement_signal: number; title_signal: number; evidence_level: number; evidence_score: number; evidence_confidence: number; source_count: number; source_type_count: number; evidence_base_score: number; confidence_adjustment: number; specificity_bonus?: number; verification_bonus?: number; outcome_bonus?: number; corroboration_bonus: number; diversity_bonus: number; score_factors?: string[] };
 type RoleMatch = { role_family: Exclude<RoleKey, "">; role_label: string; match_score: number };
 type EligibilityRequirement = { category: string; label: string; importance: "required" | "stated" | "preferred"; excerpt: string };
@@ -129,6 +129,7 @@ type MarketSummary = {
 type MarketQuality = { posting_count: number; active_source_count: number; latest_retrieved_at: string | null; graduate_junior_count: number; normalised_location_count: number; missing_publication_date_percent: number; low_confidence_count: number; stale_posting_count: number; collector_completed_count: number; collector_failed_count: number; sample_warnings: string[]; sources: { name: string; adapter: string; enabled: boolean; latest_status: string | null; last_run_at: string | null; next_run_at: string | null; refresh_interval_minutes: number; accepted_count: number; rejected_count: number }[] };
 type SavedJob = { id: string; analysis_id: string | null; source_url: string; title: string; company: string; location: string; role_family: string | null; description: string | null; status: "saved" | "preparing" | "applied" | "interview" | "offer" | "rejected" | "archived"; notes: string | null; evidenced_skill_count: number; skill_count: number; top_gaps: string[]; created_at: string; updated_at: string };
 type JobAnalysisSummary = { id: string; title: string; role_family: string; scope_status: string; confidence: number; created_at: string };
+type AnalysisDetailsMap = Record<string, DecodedRole | null>;
 
 const productRoutes: Record<ProductView, string> = {
   workspace: "/app/workspace",
@@ -167,11 +168,53 @@ const evidencePreview = (value: string) => {
   return compact.length > 260 ? `${compact.slice(0, 257)}…` : compact;
 };
 
+// Evidence can arrive from more than one source. Keep one capability row and
+// retain the strongest signal plus a compact list of supporting sources.
+function dedupeSkillEvidence(items: SkillEvidence[]): SkillEvidence[] {
+  const merged = new Map<string, SkillEvidence>();
+  for (const item of items) {
+    const key = (item.skill_slug || item.skill_name).trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, { ...item });
+      continue;
+    }
+    const currentStrength = [current.evidence_level, current.confidence];
+    const nextStrength = [item.evidence_level, item.confidence];
+    const representative = nextStrength[0] > currentStrength[0]
+      || (nextStrength[0] === currentStrength[0] && nextStrength[1] > currentStrength[1])
+      ? item
+      : current;
+    const sources = new Set(
+      `${current.source_type} + ${item.source_type}`
+        .split("+")
+        .map((source) => source.trim())
+        .filter(Boolean),
+    );
+    merged.set(key, {
+      ...representative,
+      evidence_level: Math.max(current.evidence_level, item.evidence_level),
+      confidence: Math.max(current.confidence, item.confidence),
+      source_type: [...sources].sort().join(" + "),
+    });
+  }
+  return [...merged.values()].sort((left, right) => (
+    right.evidence_level - left.evidence_level
+    || right.confidence - left.confidence
+    || left.skill_name.localeCompare(right.skill_name)
+  ));
+}
+
 function PersonalEvidenceGraph({ evidence }: { evidence: SkillEvidence[] }) {
-  const items = evidence;
+  const items = dedupeSkillEvidence(evidence).slice(0, 10);
   const cx = 260; const cy = 188; const orbit = 132;
-  const shortName = (value: string) => value.length > 15 ? `${value.slice(0, 13)}…` : value;
-  return <div className="personal-graph-layout"><svg className="personal-evidence-graph" viewBox="0 0 520 380" role="img" aria-label="Personal evidence skill network"><circle cx={cx} cy={cy} r={orbit} className="personal-graph-orbit" />{items.map((item, index) => { const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(items.length, 1); const x = cx + Math.cos(angle) * orbit; const y = cy + Math.sin(angle) * orbit; return <line key={`link-${item.skill_slug}`} x1={cx} y1={cy} x2={x} y2={y} className="personal-graph-link" />; })}{items.map((item, index) => { const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(items.length, 1); const x = cx + Math.cos(angle) * orbit; const y = cy + Math.sin(angle) * orbit; const radius = 7 + Math.max(0, Math.min(11, item.evidence_level * 2)); return <g key={item.skill_slug}><circle cx={x} cy={y} r={radius} className="personal-graph-node"><title>{item.skill_name}: {evidenceLabel(item.evidence_level)} evidence</title></circle><text x={x} y={y + radius + 16} className="personal-graph-label" textAnchor="middle">{shortName(item.skill_name)}</text></g>; })}<circle cx={cx} cy={cy} r="48" className="personal-graph-core" /><text x={cx} y={cy - 3} className="personal-graph-core-label" textAnchor="middle">MY EVIDENCE</text><text x={cx} y={cy + 15} className="personal-graph-core-count" textAnchor="middle">{evidence.length} skills</text></svg><div className="personal-graph-register"><header><span>Confirmed capabilities</span><strong>{evidence.length}</strong></header>{evidence.slice(0, 10).map((item) => <div key={item.skill_slug}><span><b>{item.skill_name}</b><small>{item.category} · {evidenceLabel(item.evidence_level)} · {item.source_type}</small></span><strong>{Math.round(item.confidence * 100)}%</strong></div>)}{evidence.length > 10 && <small className="personal-graph-more">+ {evidence.length - 10} more capabilities in your evidence record</small>}</div></div>;
+  const uniqueEvidence = dedupeSkillEvidence(evidence);
+  const labelSlots = [
+    { x: 385, y: 28, width: 170 }, { x: 385, y: 94, width: 170 }, { x: 385, y: 160, width: 170 }, { x: 385, y: 226, width: 170 }, { x: 385, y: 292, width: 170 },
+    { x: 5, y: 28, width: 170 }, { x: 5, y: 94, width: 170 }, { x: 5, y: 160, width: 170 }, { x: 5, y: 226, width: 170 }, { x: 5, y: 292, width: 170 },
+  ];
+  const shortName = (value: string) => value.length > 18 ? `${value.slice(0, 17)}…` : value;
+  return <div className="personal-graph-layout"><svg className="personal-evidence-graph" viewBox="0 0 580 380" role="img" aria-label="Personal evidence skill network"><circle cx={cx} cy={cy} r={orbit} className="personal-graph-orbit" />{items.map((item, index) => { const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(items.length, 1); const x = cx + Math.cos(angle) * orbit; const y = cy + Math.sin(angle) * orbit; return <line key={`link-${item.skill_slug}`} x1={cx} y1={cy} x2={x} y2={y} className="personal-graph-link" />; })}{items.map((item, index) => { const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(items.length, 1); const x = cx + Math.cos(angle) * orbit; const y = cy + Math.sin(angle) * orbit; const slot = labelSlots[index]; const labelOnRight = slot.x > cx; const lineEnd = labelOnRight ? slot.x : slot.x + slot.width; const radius = 10 + Math.max(0, Math.min(7, item.evidence_level)); return <g key={item.skill_slug}><line x1={x} y1={y} x2={lineEnd} y2={slot.y + 13} className="personal-graph-callout-line" /><circle cx={x} cy={y} r={radius} className="personal-graph-node"><title>{item.skill_name}: {evidenceLabel(item.evidence_level)} evidence</title></circle><text x={x} y={y + 4} className="personal-graph-node-index" textAnchor="middle">{index + 1}</text><rect x={slot.x} y={slot.y} width={slot.width} height="26" rx="4" className="personal-graph-callout-box" /><text x={slot.x + 9} y={slot.y + 17} className="personal-graph-callout-text">{index + 1} {shortName(item.skill_name)}</text><title>{item.skill_name}</title></g>; })}<circle cx={cx} cy={cy} r="48" className="personal-graph-core" /><text x={cx} y={cy - 3} className="personal-graph-core-label" textAnchor="middle">MY EVIDENCE</text><text x={cx} y={cy + 15} className="personal-graph-core-count" textAnchor="middle">{uniqueEvidence.length} skills</text></svg><div className="personal-graph-register"><header><span>Confirmed capabilities</span><strong>{uniqueEvidence.length}</strong></header>{uniqueEvidence.slice(0, 10).map((item, index) => <div key={item.skill_slug}><span><b><em>{index + 1}</em>{item.skill_name}</b><small>{item.category} · {evidenceLabel(item.evidence_level)} · {item.source_type}</small></span><strong>{Math.round(item.confidence * 100)}%</strong></div>)}{uniqueEvidence.length > 10 && <small className="personal-graph-more">+ {uniqueEvidence.length - 10} more capabilities in this view</small>}</div></div>;
 }
 
 function PersonalEvidenceAnalytics({ evidence }: { evidence: SkillEvidence[] }) {
@@ -221,15 +264,26 @@ function RoleAlignmentRadar({ fit }: { fit: RoleFit }) {
   const ring = (scale: number) => items.map((_, index) => point(index, 100 * scale)).join(" ");
   const maxWeight = Math.max(...items.map((item) => item.weight), 1);
   const benchmark = (item: FitContribution) => item.required ? 100 : Math.max(58, Math.round((item.weight / maxWeight) * 100));
-  return <div className="alignment-radar-layout"><div className="alignment-radar-wrap"><svg className="alignment-radar" viewBox="0 0 420 360" role="img" aria-label="Role benchmark compared with personal evidence"><polygon points={ring(1)} className="alignment-radar-ring" />{[.75,.5,.25].map((scale) => <polygon points={ring(scale)} className="alignment-radar-grid" key={scale} />)}{items.map((_, index) => <line key={index} x1={cx} y1={cy} x2={point(index, 100).split(",")[0]} y2={point(index, 100).split(",")[1]} className="alignment-radar-axis" />)}<polygon points={items.map((item, index) => point(index, benchmark(item))).join(" ")} className="alignment-radar-benchmark" /><polygon points={items.map((item, index) => point(index, item.normalized_score)).join(" ")} className="alignment-radar-evidence" />{items.map((item, index) => { const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(items.length, 1); return <text key={item.skill_slug} x={cx + Math.cos(angle) * 153} y={cy + Math.sin(angle) * 153} className="alignment-radar-label" textAnchor="middle">{item.skill_name}</text>; })}</svg><div className="alignment-legend"><span><i className="benchmark-key" />Role benchmark</span><span><i className="evidence-key" />Your evidence</span></div></div><div className="alignment-radar-list"><header><span>Capability alignment</span><strong>{Math.round(fit.score)}<small>/ 100 overall</small></strong></header>{items.map((item) => <div key={item.skill_slug}><span><b>{item.skill_name}</b><small>{item.required ? "Essential" : "Supporting"} · benchmark {benchmark(item)} · {fit.market_posting_count ? `${Math.round(item.market_frequency * 100)}% market mention` : "prior only"}</small></span><strong>{Math.round(item.normalized_score)}</strong><i><u style={{ width: `${Math.max(3, Math.min(100, item.normalized_score))}%` }} /></i></div>)}</div><RoleSkillSignalPlot fit={fit} /></div>;
+  return <div className="alignment-radar-layout"><div className="alignment-radar-wrap"><svg className="alignment-radar" viewBox="0 0 420 360" role="img" aria-label="Role benchmark compared with personal evidence"><polygon points={ring(1)} className="alignment-radar-ring" />{[.75,.5,.25].map((scale) => <polygon points={ring(scale)} className="alignment-radar-grid" key={scale} />)}{items.map((_, index) => <line key={index} x1={cx} y1={cy} x2={point(index, 100).split(",")[0]} y2={point(index, 100).split(",")[1]} className="alignment-radar-axis" />)}<polygon points={items.map((item, index) => point(index, benchmark(item))).join(" ")} className="alignment-radar-benchmark" /><polygon points={items.map((item, index) => point(index, item.normalized_score)).join(" ")} className="alignment-radar-evidence" />{items.map((item, index) => { const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(items.length, 1); return <text key={item.skill_slug} x={cx + Math.cos(angle) * 153} y={cy + Math.sin(angle) * 153} className="alignment-radar-label" textAnchor="middle">{item.skill_name}</text>; })}</svg><div className="alignment-legend"><span><i className="benchmark-key" />Role benchmark</span><span><i className="evidence-key" />Your evidence</span></div></div><div className="alignment-radar-list"><header><div><span>Evidence signal</span><small>{scoreLabel(fit.score)}</small></div><strong>{Math.round(fit.score)}<small>/ 100</small></strong></header><p className="alignment-score-note">A progress signal from reviewed evidence against this role benchmark, not a hiring grade.</p>{items.map((item) => <div key={item.skill_slug}><span><b>{item.skill_name}</b><small>{item.required ? "Essential" : "Supporting"} · benchmark {benchmark(item)} · {fit.market_posting_count ? `${Math.round(item.market_frequency * 100)}% market mention` : "prior only"}</small></span><strong>{Math.round(item.normalized_score)}</strong><i><u style={{ width: `${Math.max(3, Math.min(100, item.normalized_score))}%` }} /></i></div>)}</div><RoleSkillSignalPlot fit={fit} /></div>;
 }
 
-function RoleAlignmentDashboard({ role, selectedRole, roleFits, onSelectRole }: { role: RoleKey; selectedRole: Exclude<RoleKey, ""> | ""; roleFits: RoleFitMap; onSelectRole: (roleKey: Exclude<RoleKey, "">) => void }) {
+function scoreLabel(score: number): string {
+  if (score >= 75) return "Strong signal";
+  if (score >= 55) return "Growing signal";
+  return "Starting signal";
+}
+
+function scoreTone(score: number): "strong" | "growing" | "starting" {
+  if (score >= 75) return "strong";
+  if (score >= 55) return "growing";
+  return "starting";
+}
+
+function RoleAlignmentDashboard({ role, selectedRole, roleFits, loading, failed, onRetry, onSelectRole }: { role: RoleKey; selectedRole: Exclude<RoleKey, ""> | ""; roleFits: RoleFitMap; loading: boolean; failed: boolean; onRetry: () => void; onSelectRole: (roleKey: Exclude<RoleKey, "">) => void }) {
   const roleKeys = Object.keys(roles) as Exclude<RoleKey, "">[];
   const activeRole = (selectedRole || role || roleKeys[0]) as Exclude<RoleKey, "">;
   const selectedFit = roleFits[activeRole];
-  const status = (fit: RoleFit | undefined) => !fit ? "Loading" : fit.score >= 75 ? "Strongest match" : fit.score >= 55 ? "Developing fit" : "Evidence to build";
-  return <section className="role-alignment-dashboard" aria-labelledby="role-alignment-title"><header><div><span>Role-family alignment</span><h2 id="role-alignment-title">How your evidence travels across roles</h2><p>Choose a role family to compare its benchmark with the same personal evidence record. This is not a specific job score.</p></div><div className="role-alignment-meta"><span className="role-alignment-note"><Network size={14} />One evidence baseline · {roleKeys.length} role families</span>{selectedFit?.benchmark_methodology && <small>{selectedFit.benchmark_methodology}</small>}{selectedFit?.market_posting_count ? <small>{selectedFit.market_posting_count} indexed postings calibrate the selected benchmark.</small> : null}{selectedFit?.benchmark_sources?.length ? <details className="role-alignment-sources"><summary>View benchmark sources</summary><div>{selectedFit.benchmark_sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}>{source.name}<ArrowRight size={11} /></a>)}</div></details> : null}</div></header><div className="role-alignment-cards">{roleKeys.map((roleKey) => { const fit = roleFits[roleKey]; const active = roleKey === activeRole; return <button type="button" key={roleKey} className={`role-alignment-card${active ? " active" : ""}`} aria-pressed={active} onClick={() => onSelectRole(roleKey)}><span className="role-alignment-card-name"><RoleFamilyIcon roleKey={roleKey} size={17} /><strong>{roles[roleKey]}</strong></span><span className="role-alignment-card-score">{fit ? Math.round(fit.score) : "—"}<small>/ 100</small></span><span className="role-alignment-card-status">{status(fit)}</span><span className="role-alignment-card-meta">Coverage {fit ? `${Math.round(fit.coverage)}%` : "—"} · {fit ? fit.contributions.filter((item) => item.required && item.evidence_level === 0).length : "—"} priority gaps</span></button>; })}</div>{selectedFit ? <RoleAlignmentRadar fit={selectedFit} /> : <div className="alignment-loading"><RefreshCw size={18} className="spin" />Loading role-family benchmarks</div>}</section>;
+  return <section className="role-alignment-dashboard" aria-labelledby="role-alignment-title"><header><div><span>Role-family alignment</span><h2 id="role-alignment-title">How your evidence travels across roles</h2><p>Choose a role family to compare its benchmark with the same personal evidence record. Treat the signal as a progress guide, not a judgement or hiring prediction.</p></div><div className="role-alignment-meta"><span className="role-alignment-note"><Network size={14} />One evidence baseline · {roleKeys.length} role families</span>{selectedFit?.benchmark_methodology && <small>{selectedFit.benchmark_methodology}</small>}{selectedFit?.market_posting_count ? <small>{selectedFit.market_posting_count} indexed postings calibrate the selected benchmark.</small> : null}{selectedFit?.benchmark_sources?.length ? <details className="role-alignment-sources"><summary>View benchmark sources</summary><div>{selectedFit.benchmark_sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}>{source.name}<ArrowRight size={11} /></a>)}</div></details> : null}</div></header><div className="role-alignment-cards">{roleKeys.map((roleKey) => { const fit = roleFits[roleKey]; const active = roleKey === activeRole; const tone = fit ? scoreTone(fit.score) : "starting"; return <button type="button" key={roleKey} className={`role-alignment-card${active ? " active" : ""}`} aria-pressed={active} onClick={() => onSelectRole(roleKey)}><span className="role-alignment-card-name"><RoleFamilyIcon roleKey={roleKey} size={17} /><strong>{roles[roleKey]}</strong></span><span className="role-alignment-card-score-label">Evidence signal</span><span className={`role-alignment-card-score score-tone-${tone}`}>{fit ? Math.round(fit.score) : "—"}<small>/ 100</small></span><span className="role-alignment-card-meter"><i><u style={{ width: `${fit ? Math.max(8, Math.min(100, fit.score)) : 8}%` }} /></i></span><span className="role-alignment-card-status">{fit ? scoreLabel(fit.score) : loading ? "Loading" : "Unavailable"}</span><span className="role-alignment-card-meta">Coverage {fit ? `${Math.round(fit.coverage)}%` : "—"} · {fit ? fit.contributions.filter((item) => item.required && item.evidence_level === 0).length : "—"} priority gaps</span></button>; })}</div>{selectedFit ? <RoleAlignmentRadar fit={selectedFit} /> : <div className="alignment-loading">{loading ? <><RefreshCw size={18} className="spin" />Loading role-family benchmarks</> : failed ? <><span>Role-family benchmarks could not be loaded.</span><button type="button" className="text-button" onClick={onRetry}>Retry</button></> : <><RefreshCw size={18} className="spin" />Preparing role-family benchmarks</>}</div>}</section>;
 }
 
 function RoleComparisonRadar({ skillDemands, focus }: { skillDemands: SkillDemand[]; focus: "all" | Exclude<RoleKey, ""> }) {
@@ -251,7 +305,7 @@ const adjacentRoles: Record<Exclude<RoleKey, "">, Exclude<RoleKey, "">[]> = {
 };
 
 function MarketView({ market, quality, targetRole, navigate }: { market: MarketSummary | null; quality: MarketQuality | null; targetRole: RoleKey; navigate: (path: string) => void }) {
-  const initialRole = targetRole || "software";
+  const initialRole = targetRole || (market?.roles.find((item) => item.count > 0)?.role_family as Exclude<RoleKey, ""> | undefined) || "software";
   const [focus, setFocus] = useState<Exclude<RoleKey, "">>(initialRole);
 
   if (!market?.posting_count) return <div className="tool-page"><header><p className="page-kicker-icon"><BarChart3 size={15} />Your market</p><h1>Technology opportunities</h1><span>Use current, governed job records to make a more informed search decision.</span></header><section className="tool-panel market-empty-panel"><div className="market-empty"><span className="empty-state-mark"><BarChart3 size={22} /></span><p className="empty-state-kicker">Data coverage</p><h2>Market coverage is not ready yet</h2><p>No permitted job records are currently indexed for this workspace. Your profile and role decoder remain available while the next market collection is processed.</p><div className="empty-state-actions"><button type="button" className="primary-button" onClick={() => navigate(productRoutes.decoder)}>Analyse a job advertisement <ArrowRight size={15} /></button><button type="button" className="secondary-button" onClick={() => navigate(productRoutes.workspace)}>Review my profile</button></div></div></section></div>;
@@ -290,40 +344,48 @@ function MarketView({ market, quality, targetRole, navigate }: { market: MarketS
   </div>;
 }
 
-function CareerPathView({ role, market, navigate }: { role: RoleKey; market: MarketSummary | null; navigate: (path: string) => void }) {
+function CareerPathView({ role, market, roleFits, navigate, onSelectRole }: { role: RoleKey; market: MarketSummary | null; roleFits: RoleFitMap; navigate: (path: string) => void; onSelectRole: (roleKey: Exclude<RoleKey, "">) => void }) {
+  const availableRoutes = role ? adjacentRoles[role] : [];
+  const [selectedRoute, setSelectedRoute] = useState<Exclude<RoleKey, "">>(availableRoutes[0] || "software");
   if (!role) return <div className="tool-page pathway-page"><header><p className="page-kicker-icon"><Route size={15} />Career paths</p><h1>Compare credible next moves</h1><span>Start with a target role so each adjacent path has a clear professional baseline.</span></header><section className="pathway-empty"><Target size={22} /><div><span>Target required</span><h2>Set your current direction first</h2><p>CareerSignal needs a role family, market and level before it can frame adjacent options.</p></div><button className="primary-button" onClick={() => navigate(productRoutes.workspace)}>Set target role <ArrowRight size={15} /></button></section></div>;
 
-  const options = adjacentRoles[role].slice(0, 3).map((roleKey, index) => ({
-    roleKey,
-    sequence: String(index + 1).padStart(2, "0"),
-    openings: market?.roles.find((item) => item.role_family === roleKey)?.count ?? null,
-  }));
+  const currentFit = roleFits[role];
+  const selectedFit = roleFits[selectedRoute];
+  const selectedOpenings = market?.roles.find((item) => item.role_family === selectedRoute)?.count ?? null;
   const currentOpenings = market?.roles.find((item) => item.role_family === role)?.count ?? null;
+  const nextProof = selectedFit?.contributions
+    .filter((item) => item.evidence_level === 0)
+    .sort((left, right) => Number(right.required) - Number(left.required) || right.weight - left.weight)
+    .slice(0, 3) ?? [];
 
   return <div className="tool-page pathway-page">
-    <header className="pathway-header"><div><p className="page-kicker-icon"><Route size={15} />Career paths</p><h1>Routes from {roles[role]}</h1><span>Compare adjacent technical directions before deciding which evidence is worth building next.</span></div><button className="secondary-button" onClick={() => navigate(productRoutes.graph)}><FileCheck2 size={16} />Review my evidence</button></header>
-    <section className="pathway-report">
-      <div className="pathway-report-bar"><div className="report-bar-item"><Route size={18} /><span><small>Career route map</small><strong>Current target and adjacent role families</strong></span></div><div className="report-bar-item"><MapPin size={18} /><span><small>Market context</small><strong>New Zealand · indexed sample</strong></span></div></div>
-      <div className="pathway-canvas">
-        <article className="pathway-origin"><span>Current direction</span><div className="pathway-node-mark"><RoleFamilyIcon roleKey={role} size={21} /></div><h2>{roles[role]}</h2><p>Your confirmed evidence and selected market form the baseline for every route.</p><dl><div><dt>Indexed roles</dt><dd>{currentOpenings ?? "—"}</dd></div><div><dt>Status</dt><dd><Target size={12} />Active target</dd></div></dl></article>
-        <div className="pathway-connector" aria-hidden="true"><i /><i /><i /></div>
-        <div className="pathway-options">{options.map((item, index) => <article key={item.roleKey}><span>Adjacent route {item.sequence}</span><span className="pathway-role-icon"><RoleFamilyIcon roleKey={item.roleKey} size={19} /></span><div><h2>{roles[item.roleKey]}</h2><small>{index === 0 ? "Closest related direction" : index === 1 ? "Broader capability move" : "Alternative technical track"}</small></div><dl><div><dt>Indexed roles</dt><dd>{item.openings ?? "—"}</dd></div><div><dt>Evidence review</dt><dd>Required</dd></div></dl><button onClick={() => navigate(productRoutes.graph)}>View role alignment <ArrowRight size={14} /></button></article>)}</div>
-      </div>
-      <footer className="pathway-footer"><Compass size={20} /><div><span>How to use this map</span><p>Role proximity is directional, not a promise of eligibility. Open a route to prioritise evidence, then validate it against current job advertisements.</p></div><button className="primary-button" onClick={() => navigate(productRoutes.decoder)}>Compare a live role <ArrowRight size={15} /></button></footer>
+    <header className="pathway-header"><div><p className="page-kicker-icon"><Route size={15} />Career paths</p><h1>Plan the next evidence move</h1><span>Start from your current role, choose one adjacent direction, then turn its gaps into a concrete proof plan.</span></div><button className="secondary-button" onClick={() => navigate(productRoutes.graph)}><FileCheck2 size={16} />Review my evidence</button></header>
+    <section className="pathway-planner">
+      <div className="pathway-planner-head"><div><span className="panel-kicker">01 · Current baseline</span><h2>{roles[role]}</h2><p>{currentFit ? `${Math.round(currentFit.coverage)}% of the current role benchmark is covered by your reviewed evidence.` : "Your role benchmark is being prepared."}</p></div><div className="pathway-baseline-metrics"><span><small>Evidence signal</small><strong>{currentFit ? Math.round(currentFit.score) : "—"}</strong></span><span><small>Indexed roles</small><strong>{currentOpenings ?? "—"}</strong></span></div></div>
+      <div className="pathway-step-label"><span>02 · Choose a direction</span><small>Routes are ordered by role proximity, not a promise of eligibility.</small></div>
+      <div className="pathway-route-grid">{availableRoutes.slice(0, 3).map((routeKey, index) => { const fit = roleFits[routeKey]; const openings = market?.roles.find((item) => item.role_family === routeKey)?.count ?? null; const active = selectedRoute === routeKey; return <button type="button" className={`pathway-route-card${active ? " active" : ""}`} key={routeKey} onClick={() => setSelectedRoute(routeKey)} aria-pressed={active}><span className="pathway-route-number">0{index + 1}</span><span className="pathway-role-icon"><RoleFamilyIcon roleKey={routeKey} size={20} /></span><strong>{roles[routeKey]}</strong><small>{fit ? `${Math.round(fit.coverage)}% coverage · ${scoreLabel(fit.score)}` : "Benchmark loading"}</small><span className="pathway-route-meta"><span>{openings ?? "—"} indexed roles</span><ArrowRight size={15} /></span></button>; })}</div>
+      <section className="pathway-route-detail"><div><span className="panel-kicker">03 · Selected route</span><h2><RoleFamilyIcon roleKey={selectedRoute} size={20} />{roles[selectedRoute]}</h2><p>{selectedFit ? `Your current evidence provides a ${scoreLabel(selectedFit.score).toLowerCase()} for this direction. Build the missing proof in order of priority.` : "The benchmark will appear when role evidence finishes loading."}</p><div className="pathway-detail-metrics"><span><small>Evidence signal</small><strong>{selectedFit ? Math.round(selectedFit.score) : "—"}<em>/ 100</em></strong></span><span><small>Indexed roles</small><strong>{selectedOpenings ?? "—"}</strong></span><span><small>Priority gaps</small><strong>{selectedFit ? selectedFit.contributions.filter((item) => item.required && item.evidence_level === 0).length : "—"}</strong></span></div></div><div className="pathway-proof-list"><span>Build next</span>{nextProof.length ? nextProof.map((item) => <div key={item.skill_slug}><span><b>{item.skill_name}</b><small>{item.required ? "Essential capability" : "Supporting capability"}</small></span><ArrowRight size={14} /></div>) : <p>No priority gaps are available yet. Compare a live advertisement to choose a specific proof target.</p>}</div><div className="pathway-detail-actions"><button className="primary-button" onClick={() => { onSelectRole(selectedRoute); navigate(productRoutes.graph); }}><Network size={15} />Open role alignment</button><button className="secondary-button" onClick={() => navigate(productRoutes.decoder)}><BriefcaseBusiness size={15} />Compare a live role</button></div></section>
+      <footer className="pathway-planner-footer"><ShieldCheck size={17} /><span>Use pathways to choose what to prove next. Validate the direction against a specific job advertisement before applying.</span></footer>
     </section>
   </div>;
 }
 
-function CapabilityProfileView({ role, evidence, roleFits, selectedRole, onSelectRole, navigate }: { role: RoleKey; evidence: SkillEvidence[]; roleFits: RoleFitMap; selectedRole: Exclude<RoleKey, ""> | ""; onSelectRole: (roleKey: Exclude<RoleKey, "">) => void; navigate: (path: string) => void }) {
+type EvidenceRoleFilter = "all" | Exclude<RoleKey, "">;
+
+function CapabilityProfileView({ role, evidence, roleFits, roleFitsLoading, roleFitsError, onRetryRoleFits, selectedRole, onSelectRole, evidenceFilter, onSelectEvidenceFilter, navigate }: { role: RoleKey; evidence: SkillEvidence[]; roleFits: RoleFitMap; roleFitsLoading: boolean; roleFitsError: boolean; onRetryRoleFits: () => void; selectedRole: Exclude<RoleKey, ""> | ""; onSelectRole: (roleKey: Exclude<RoleKey, "">) => void; evidenceFilter: EvidenceRoleFilter; onSelectEvidenceFilter: (filter: EvidenceRoleFilter) => void; navigate: (path: string) => void }) {
+  const uniqueEvidence = dedupeSkillEvidence(evidence);
+  const activeFit = evidenceFilter === "all" ? null : roleFits[evidenceFilter];
+  const activeSlugs = activeFit ? new Set(activeFit.contributions.map((item) => item.skill_slug)) : null;
+  const filteredEvidence = activeSlugs ? uniqueEvidence.filter((item) => activeSlugs.has(item.skill_slug)) : uniqueEvidence;
   return <div className="tool-page capability-page">
-    <header className="capability-page-header"><div><p className="page-kicker-icon"><Network size={15} />My capability network</p><h1>All the evidence you can currently prove</h1><span>This is your portable capability record. It stays independent of a single target role and can be aligned to different technical directions.</span></div><div className="capability-header-context"><span><FileCheck2 size={14} />Evidence register</span><strong>{evidence.length} confirmed skills</strong></div></header>
-    {evidence.length ? <section className="capability-report personal-capability-report">
+    <header className="capability-page-header"><div><p className="page-kicker-icon"><Network size={15} />My capability network</p><h1>All the evidence you can currently prove</h1><span>This is your portable capability record. It stays independent of a single target role and can be aligned to different technical directions.</span></div><div className="capability-header-context"><span><FileCheck2 size={14} />Evidence register</span><strong>{uniqueEvidence.length} confirmed skills</strong></div></header>
+    {uniqueEvidence.length ? <section className="capability-report personal-capability-report">
       <div className="capability-report-bar"><div className="report-bar-item"><Network size={18} /><span><small>Personal capability map</small><strong>Confirmed evidence across your work</strong></span></div><div><button className="text-button" onClick={() => navigate(productRoutes.workspace)}><FileText size={15} />Manage evidence</button><button className="secondary-button" onClick={() => navigate(productRoutes.decoder)}><BriefcaseBusiness size={15} />Compare a JD</button></div></div>
-      <div className="personal-graph-frame"><header><div><span>Evidence network</span><h2>Your skills, sources and evidence maturity</h2></div><small>Independent of any single target</small></header><PersonalEvidenceGraph evidence={evidence} /></div>
-      <PersonalEvidenceAnalytics evidence={evidence} />
-      <PersonalEvidenceVisuals evidence={evidence} />
+      <div className="personal-graph-frame"><header><div><span>Evidence network</span><h2>Your skills, sources and evidence maturity</h2><p className="profile-filter-note">{filteredEvidence.length} matching capabilities from {uniqueEvidence.length} confirmed skills</p></div><div className="profile-role-filter" role="tablist" aria-label="Filter evidence by role family"><button type="button" role="tab" aria-selected={evidenceFilter === "all"} className={evidenceFilter === "all" ? "active" : ""} onClick={() => onSelectEvidenceFilter("all")}><Layers3 size={14} />All capabilities</button>{Object.entries(roles).map(([key, label]) => <button type="button" role="tab" aria-selected={evidenceFilter === key} className={evidenceFilter === key ? "active" : ""} onClick={() => onSelectEvidenceFilter(key as Exclude<RoleKey, "">)} key={key}><RoleFamilyIcon roleKey={key as Exclude<RoleKey, "">} size={14} />{label}</button>)}</div></header><PersonalEvidenceGraph evidence={filteredEvidence} /></div>
+      <PersonalEvidenceAnalytics evidence={filteredEvidence} />
+      <PersonalEvidenceVisuals evidence={filteredEvidence} />
       <CapabilityMethodology />
-      <RoleAlignmentDashboard role={role} selectedRole={selectedRole} roleFits={roleFits} onSelectRole={onSelectRole} />
+      <RoleAlignmentDashboard role={role} selectedRole={selectedRole} roleFits={roleFits} loading={roleFitsLoading} failed={roleFitsError} onRetry={onRetryRoleFits} onSelectRole={onSelectRole} />
       <footer className="capability-report-footer"><ShieldCheck size={17} /><p><strong>How to use this report</strong> This network shows what you have actually evidenced. Select a role family above to compare the same record with Software, Data, AI and Cloud benchmarks.</p></footer>
     </section> : <section className="pathway-empty"><FileText size={22} /><div><span>Evidence required</span><h2>Build your personal capability record first</h2><p>Complete Workspace setup and confirm CV or GitHub evidence. Your map will then work across every role family.</p></div><button className="primary-button" onClick={() => navigate(productRoutes.workspace)}>Open workspace <ArrowRight size={15} /></button></section>}
   </div>;
@@ -340,21 +402,39 @@ const applicationStageLabels: Record<SavedJob["status"], string> = {
   archived: "Archived",
 };
 
-function JobsView({ jobs, loading, history, historyJobId, historyLoading, onHistory, onStatus, onNotes, onDelete, onReview, navigate }: { jobs: SavedJob[]; loading: boolean; history: JobStatusEvent[]; historyJobId: string | null; historyLoading: boolean; onHistory: (job: SavedJob) => void; onStatus: (job: SavedJob, status: SavedJob["status"]) => void; onNotes: (job: SavedJob, notes: string) => void; onDelete: (job: SavedJob) => void; onReview: (job: SavedJob) => void; navigate: (path: string) => void }) {
+function SavedRoleComparison({ jobs, details, loading, failed, onToggleCompare }: { jobs: SavedJob[]; details: AnalysisDetailsMap; loading: boolean; failed: boolean; onToggleCompare: (job: SavedJob) => void }) {
+  const capabilityMap = new Map<string, { name: string; jobs: Map<string, SkillDemand> }>();
+  jobs.forEach((job) => {
+    details[job.id]?.skill_demands.forEach((demand) => {
+      const current = capabilityMap.get(demand.slug) ?? { name: demand.name, jobs: new Map<string, SkillDemand>() };
+      current.jobs.set(job.id, demand);
+      capabilityMap.set(demand.slug, current);
+    });
+  });
+  const capabilities = [...capabilityMap.entries()]
+    .sort((left, right) => Math.max(...[...right[1].jobs.values()].map((item) => item.demand_score), 0) - Math.max(...[...left[1].jobs.values()].map((item) => item.demand_score), 0))
+    .slice(0, 10);
+  return <section className="jobs-compare-panel" aria-labelledby="jobs-compare-title"><header><div><span className="panel-kicker">Role comparison</span><h2 id="jobs-compare-title">Compare saved roles here</h2><p>This comparison stays in Applications: requirements, evidence coverage and priority signals are shown side by side without sending you back to Profile.</p></div><span className="jobs-compare-count">{jobs.length} selected</span></header><div className="jobs-compare-grid">{jobs.map((job) => <article key={job.id}><div className="jobs-compare-card-head"><span>{job.role_family && roles[job.role_family as Exclude<RoleKey, "">] ? roles[job.role_family as Exclude<RoleKey, "">] : "Role analysis"}</span><button type="button" aria-label={`Remove ${job.title} from comparison`} onClick={() => onToggleCompare(job)}><X size={15} /></button></div><h3>{job.title}</h3><p>{job.company} · {job.location}</p><div className="jobs-compare-readiness"><strong>{job.skill_count ? `${job.evidenced_skill_count}/${job.skill_count}` : "—"}</strong><span>evidence covered</span><i><u style={{ width: `${job.skill_count ? Math.max(4, Math.min(100, (job.evidenced_skill_count / job.skill_count) * 100)) : 4}%` }} /></i></div><small>{job.status === "saved" ? "Ready to review" : applicationStageLabels[job.status]}{job.top_gaps.length ? ` · Next: ${job.top_gaps.slice(0, 2).join(", ")}` : ""}</small><div className="jobs-compare-requirements"><span>Top requirements</span>{details[job.id]?.skill_demands.slice(0, 4).map((demand) => <b key={demand.slug}>{demand.name}<small>{Math.round(demand.demand_score)} · {demand.importance}</small></b>)}{!details[job.id] && <small>{loading ? "Loading saved analysis..." : "Analysis details unavailable"}</small>}</div></article>)}</div>{loading && <div className="jobs-compare-state"><RefreshCw size={16} className="spin" />Loading saved analysis details</div>}{failed && !loading && <div className="jobs-compare-state"><span>Some saved analysis details could not be loaded. The evidence coverage above is still available.</span></div>}{!loading && !failed && capabilities.length > 0 && <section className="jobs-compare-matrix" aria-labelledby="jobs-compare-matrix-title"><header><div><span className="panel-kicker">Requirement matrix</span><h3 id="jobs-compare-matrix-title">What each job is asking for</h3></div><small>Higher values indicate stronger demand in that advertisement.</small></header><div className="jobs-compare-matrix-table"><div className="jobs-compare-matrix-head"><strong>Capability</strong>{jobs.map((job) => <span key={job.id}>{job.title}</span>)}</div>{capabilities.map(([slug, capability]) => <div className="jobs-compare-matrix-row" key={slug}><strong>{capability.name}</strong>{jobs.map((job) => { const demand = capability.jobs.get(job.id); return <span className={demand ? "present" : "absent"} key={job.id}>{demand ? `${Math.round(demand.demand_score)} · ${demand.importance}` : "Not detected"}</span>; })}</div>)}</div></section>}</section>;
+}
+
+function JobsView({ jobs, loading, history, historyJobId, historyLoading, comparisonJobIds, comparisonDetails, comparisonDetailsLoading, comparisonDetailsError, onToggleCompare, onClearCompare, onHistory, onStatus, onNotes, onDelete, onReview, navigate }: { jobs: SavedJob[]; loading: boolean; history: JobStatusEvent[]; historyJobId: string | null; historyLoading: boolean; comparisonJobIds: string[]; comparisonDetails: AnalysisDetailsMap; comparisonDetailsLoading: boolean; comparisonDetailsError: boolean; onToggleCompare: (job: SavedJob) => void; onClearCompare: () => void; onHistory: (job: SavedJob) => void; onStatus: (job: SavedJob, status: SavedJob["status"]) => void; onNotes: (job: SavedJob, notes: string) => void; onDelete: (job: SavedJob) => void; onReview: (job: SavedJob) => void; navigate: (path: string) => void }) {
   const active = jobs.filter((job) => !["rejected", "archived"].includes(job.status));
+  const [compareMode, setCompareMode] = useState(comparisonJobIds.length > 0);
+  const comparisonJobs = jobs.filter((job) => comparisonJobIds.includes(job.id));
   return <div className="tool-page jobs-page">
-    <header className="jobs-header"><div><p className="page-kicker-icon"><ClipboardList size={15} />Application tracker</p><h1>Your role decisions, in one place</h1><span>Keep saved opportunities, preparation and application outcomes connected to the same evidence profile.</span></div><button className="primary-button" onClick={() => navigate(productRoutes.decoder)}><BriefcaseBusiness size={15} />Compare another role</button></header>
+    <header className="jobs-header"><div><p className="page-kicker-icon"><ClipboardList size={15} />Application tracker</p><h1>Your role decisions, in one place</h1><span>Keep saved opportunities, preparation and application outcomes connected to the same evidence profile.</span></div><div className="jobs-header-actions"><button className="secondary-button" onClick={() => { setCompareMode((current) => !current); if (compareMode) onClearCompare(); }}><Layers3 size={15} />{compareMode ? "Done selecting" : "Compare saved roles"}</button><button className="primary-button" onClick={() => navigate(productRoutes.decoder)}><BriefcaseBusiness size={15} />Compare another role</button></div></header>
     <section className="jobs-summary" aria-label="Application pipeline summary">
       <div><span>Active opportunities</span><strong>{active.length}</strong><small>excluding closed and archived roles</small></div>
       <div><span>Applications sent</span><strong>{jobs.filter((job) => ["applied", "interview", "offer"].includes(job.status)).length}</strong><small>currently in progress</small></div>
       <div><span>Interview stage</span><strong>{jobs.filter((job) => job.status === "interview").length}</strong><small>requiring preparation</small></div>
     </section>
+    {compareMode && (comparisonJobs.length >= 2 ? <SavedRoleComparison jobs={comparisonJobs} details={comparisonDetails} loading={comparisonDetailsLoading} failed={comparisonDetailsError} onToggleCompare={onToggleCompare} /> : <section className="jobs-compare-panel" aria-labelledby="jobs-compare-title"><header><div><span className="panel-kicker">Role comparison</span><h2 id="jobs-compare-title">Compare saved analyses</h2><p>Select up to three saved roles below. The comparison stays here once two roles are selected.</p></div><span className="jobs-compare-count">{comparisonJobs.length} selected</span></header><div className="jobs-compare-empty"><Layers3 size={19} /><span>{comparisonJobs.length ? "Select one more saved role to compare." : "Select two or three saved roles from the list below."}</span></div></section>)}
     <section className="jobs-register">
       <header><div><span className="panel-kicker">Saved decisions</span><h2>Application pipeline</h2></div><small>{jobs.length} role{jobs.length === 1 ? "" : "s"}</small></header>
       {loading ? <div className="jobs-empty"><RefreshCw size={22} className="spin" /><h3>Loading your applications</h3></div> : jobs.length ? <div className="jobs-table" role="table" aria-label="Saved job applications">
          <div className="jobs-table-head" role="row"><span>Opportunity</span><span>Evidence readiness</span><span>Stage</span><span>Actions</span></div>
         {jobs.map((job) => <article className="jobs-row" role="row" key={job.id}>
-          <div><a href={job.analysis_id ? productRoutes.decoder : job.source_url} target={job.analysis_id ? undefined : "_blank"} rel={job.analysis_id ? undefined : "noreferrer"} onClick={job.analysis_id ? (event) => { event.preventDefault(); navigate(productRoutes.decoder); } : undefined}>{job.title}</a><span>{job.company} · {job.analysis_id ? "Saved analysis" : job.location}</span><small>{job.analysis_id ? job.location : ""}</small></div>
+          <div>{compareMode && <label className="job-compare-toggle"><input type="checkbox" checked={comparisonJobIds.includes(job.id)} onChange={() => onToggleCompare(job)} disabled={!comparisonJobIds.includes(job.id) && comparisonJobIds.length >= 3} /><span>Compare</span></label>}<a href={job.analysis_id ? productRoutes.decoder : job.source_url} target={job.analysis_id ? undefined : "_blank"} rel={job.analysis_id ? undefined : "noreferrer"} onClick={job.analysis_id ? (event) => { event.preventDefault(); navigate(productRoutes.decoder); } : undefined}>{job.title}</a><span>{job.company} · {job.analysis_id ? "Saved analysis" : job.location}</span><small>{job.analysis_id ? job.location : ""}</small></div>
           <div className="job-readiness">{job.skill_count > 0 ? <><strong>{job.evidenced_skill_count} / {job.skill_count}</strong><span>capabilities evidenced</span>{job.top_gaps.length > 0 && <small>Next: {job.top_gaps.slice(0, 2).join(", ")}</small>}</> : <><strong>Review needed</strong><span>Compare the full advertisement</span></>}</div>
           <label><span className="sr-only">Application status for {job.title}</span><select value={job.status} onChange={(event) => onStatus(job, event.target.value as SavedJob["status"])}>{applicationStages.map((stage) => <option key={stage} value={stage}>{applicationStageLabels[stage]}</option>)}</select></label>
           <div className="job-row-actions"><button type="button" className="secondary-button job-plan-button" onClick={() => onReview(job)}><FileCheck2 size={13} />{job.analysis_id ? "Review fit" : "Compare first"}</button><button type="button" className="text-button" onClick={() => onHistory(job)} aria-expanded={historyJobId === job.id}><History size={13} />{historyJobId === job.id ? "Hide" : "History"}</button><button type="button" className="text-button" onClick={() => { const notes = window.prompt("Notes for this opportunity", job.notes ?? ""); if (notes !== null) onNotes(job, notes); }}>Notes</button><button type="button" className="text-button danger-button" onClick={() => onDelete(job)}>Remove</button></div>
@@ -545,6 +625,9 @@ export default function App() {
   const [cvUploadId, setCvUploadId] = useState<string | null>(null);
   const [cvStatus, setCvStatus] = useState<string>("");
   const [cvFailureReason, setCvFailureReason] = useState<string | null>(null);
+  const [cvLabel, setCvLabel] = useState("");
+  const [cvTargetRole, setCvTargetRole] = useState<RoleKey>("");
+  const [cvVersions, setCvVersions] = useState<UploadRecord[]>([]);
   const [suggestions, setSuggestions] = useState<EvidenceSuggestion[]>([]);
   const [confirmedSuggestions, setConfirmedSuggestions] = useState<Set<string>>(new Set());
   const [github, setGithub] = useState("");
@@ -561,6 +644,9 @@ export default function App() {
   const [editingProfile, setEditingProfile] = useState(true);
   const [profileUpdatedAt, setProfileUpdatedAt] = useState<string | null>(null);
   const [roleFits, setRoleFits] = useState<RoleFitMap>({});
+  const [roleFitsLoading, setRoleFitsLoading] = useState(false);
+  const [roleFitsError, setRoleFitsError] = useState(false);
+  const [roleFitsRefresh, setRoleFitsRefresh] = useState(0);
   const [selectedProfileRole, setSelectedProfileRole] = useState<Exclude<RoleKey, ""> | "">("");
   const [personalEvidence, setPersonalEvidence] = useState<SkillEvidence[]>([]);
   const view = routeViews[routerLocation.pathname];
@@ -579,11 +665,16 @@ export default function App() {
   const [aiExplanation, setAiExplanation] = useState<{ answer: string; model: string } | null>(null);
   const [explainingEvidence, setExplainingEvidence] = useState(false);
   const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+  const [comparisonJobIds, setComparisonJobIds] = useState<string[]>([]);
+  const [comparisonDetails, setComparisonDetails] = useState<AnalysisDetailsMap>({});
+  const [comparisonDetailsLoading, setComparisonDetailsLoading] = useState(false);
+  const [comparisonDetailsError, setComparisonDetailsError] = useState(false);
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [jobHistory, setJobHistory] = useState<JobStatusEvent[]>([]);
   const [historyJobId, setHistoryJobId] = useState<string | null>(null);
   const [loadingJobHistory, setLoadingJobHistory] = useState(false);
   const [analysisHistory, setAnalysisHistory] = useState<JobAnalysisSummary[]>([]);
+  const [profileEvidenceFilter, setProfileEvidenceFilter] = useState<EvidenceRoleFilter>("all");
 
   useEffect(() => {
     const search = new URLSearchParams(routerLocation.search);
@@ -617,12 +708,15 @@ export default function App() {
       if (!active) return;
       if (uploadsResponse.ok) {
         const uploads: UploadRecord[] = await uploadsResponse.json();
+        setCvVersions(uploads);
         const current = uploads.find((item) => !["failed", "rejected", "scan_failed", "parse_failed"].includes(item.status));
         if (current) {
           setCvUploadId(current.id);
           setCvFilename(current.original_filename);
           setCvStatus(current.status);
           setCvFailureReason(current.failure_reason ?? null);
+          setCvLabel(current.cv_label ?? "");
+          setCvTargetRole((current.target_role as RoleKey) || "");
         }
       }
       if (!profileResponse.ok) {
@@ -710,25 +804,68 @@ export default function App() {
   }, [token, view]);
 
   useEffect(() => {
-    if (!token || view !== "graph" || !role) return;
+    if (!token || view !== "jobs" || comparisonJobIds.length < 2) {
+      setComparisonDetails({});
+      setComparisonDetailsLoading(false);
+      setComparisonDetailsError(false);
+      return;
+    }
+    let active = true;
+    const selectedJobs = savedJobs.filter((job) => comparisonJobIds.includes(job.id) && job.analysis_id);
+    if (!selectedJobs.length) {
+      setComparisonDetails({});
+      setComparisonDetailsLoading(false);
+      setComparisonDetailsError(false);
+      return;
+    }
+    setComparisonDetailsLoading(true);
+    setComparisonDetailsError(false);
+    const headers = { Authorization: `Bearer ${token}` };
+    Promise.allSettled(selectedJobs.map(async (job) => {
+      const response = await fetch(`${API_URL}/api/v1/role-decoder/history/${job.analysis_id}`, { headers });
+      if (!response.ok) throw new Error(`Saved analysis request failed: ${response.status}`);
+      const payload = await response.json() as { result?: DecodedRole };
+      if (!payload.result) throw new Error("Saved analysis result missing");
+      return [job.id, payload.result] as const;
+    })).then((results) => {
+      if (!active) return;
+      const next: AnalysisDetailsMap = {};
+      let failed = false;
+      results.forEach((result) => {
+        if (result.status === "fulfilled") next[result.value[0]] = result.value[1];
+        else failed = true;
+      });
+      setComparisonDetails(next);
+      setComparisonDetailsError(failed);
+    }).finally(() => {
+      if (active) setComparisonDetailsLoading(false);
+    });
+    return () => { active = false; };
+  }, [comparisonJobIds, savedJobs, token, view]);
+
+  useEffect(() => {
+    if (!token || !["graph", "path"].includes(view ?? "") || !role) return;
     let active = true;
     const headers = { Authorization: `Bearer ${token}` };
     const roleKeys = Object.keys(roles) as Exclude<RoleKey, "">[];
-    Promise.all(roleKeys.map(async (roleKey) => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRoleFitsLoading(true);
+    setRoleFitsError(false);
+    Promise.allSettled(roleKeys.map(async (roleKey) => {
       const response = await fetch(`${API_URL}/api/v1/evidence/fit?role_family=${encodeURIComponent(roleKey)}`, { headers });
-      if (!response.ok) return [roleKey, null] as const;
+      if (!response.ok) throw new Error(`Role fit request failed: ${response.status}`);
       return [roleKey, await response.json() as RoleFit] as const;
-    })).then((entries) => {
+    })).then((results) => {
       if (!active) return;
       const nextFits: RoleFitMap = {};
-      entries.forEach(([roleKey, roleFit]) => { if (roleFit) nextFits[roleKey] = roleFit; });
+      results.forEach((result) => { if (result.status === "fulfilled") nextFits[result.value[0]] = result.value[1]; });
       setRoleFits(nextFits);
-       setSelectedProfileRole((current) => current || role);
-    }).catch(() => {
-      if (active) setError("Role readiness could not be loaded.");
-    });
+      setSelectedProfileRole((current) => current || role);
+      if (!Object.keys(nextFits).length) setRoleFitsError(true);
+    }).catch(() => { if (active) setRoleFitsError(true); })
+      .finally(() => { if (active) setRoleFitsLoading(false); });
     return () => { active = false; };
-  }, [role, token, view]);
+  }, [role, roleFitsRefresh, token, view]);
 
   useEffect(() => {
     if (!token || !["graph", "workspace"].includes(view ?? "")) return;
@@ -739,7 +876,7 @@ export default function App() {
         if (!response.ok) throw new Error();
         return response.json() as Promise<{ evidence: SkillEvidence[] }>;
       })
-      .then((data) => { if (active) setPersonalEvidence(data.evidence ?? []); })
+      .then((data) => { if (active) setPersonalEvidence(dedupeSkillEvidence(data.evidence ?? [])); })
       .catch(() => { if (active) setError("Your capability evidence could not be loaded."); });
     return () => { active = false; };
   }, [role, token, view]);
@@ -752,7 +889,7 @@ export default function App() {
     setCvStatus("uploading");
     const contentType = file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     try {
-      const initiated = await fetch(`${API_URL}/api/v1/evidence/uploads`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ filename: file.name, content_type: contentType, size: file.size }) });
+      const initiated = await fetch(`${API_URL}/api/v1/evidence/uploads`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ filename: file.name, content_type: contentType, size: file.size, cv_label: cvLabel.trim() || null, target_role: cvTargetRole || role || null }) });
       const upload = await initiated.json();
       if (!initiated.ok) throw new Error(apiError(upload, "Could not prepare upload"));
       setCvUploadId(upload.id);
@@ -764,6 +901,7 @@ export default function App() {
       if (!completed.ok) throw new Error(apiError(result, "Could not complete upload"));
       setCvStatus(result.status);
       setCvFailureReason(result.failure_reason ?? null);
+      setCvVersions((current) => [{ ...result, cv_label: result.cv_label ?? (cvLabel.trim() || null), target_role: result.target_role ?? (cvTargetRole || role || null) }, ...current.filter((item) => item.id !== result.id)]);
     } catch (caught) {
       setCvStatus("failed");
       setError(caught instanceof Error ? caught.message : "Upload failed");
@@ -777,6 +915,8 @@ export default function App() {
     setCvUploadId(null);
     setCvStatus("");
     setCvFailureReason(null);
+    setCvLabel("");
+    setCvTargetRole("");
     setSuggestions([]);
     setConfirmedSuggestions(new Set());
   }
@@ -1020,6 +1160,12 @@ export default function App() {
     setSavedJobs((current) => current.map((item) => item.id === job.id ? result as SavedJob : item));
   }
 
+  function toggleJobComparison(job: SavedJob) {
+    setComparisonJobIds((current) => current.includes(job.id)
+      ? current.filter((id) => id !== job.id)
+      : current.length >= 3 ? current : [...current, job.id]);
+  }
+
   function reviewSavedJob(job: SavedJob) {
     if (!job.analysis_id || !job.role_family || !(job.role_family in roles)) {
       setDecoderTitle(job.title);
@@ -1222,8 +1368,8 @@ export default function App() {
                 <div className="eligibility-list">{decodedRole.eligibility_requirements.map((requirement, index) => <div className="eligibility-row" key={`${requirement.category}-${index}`}><div><strong>{requirement.label}</strong><span className={`requirement-level ${requirement.importance}`}>{requirement.importance === "required" ? "Required" : requirement.importance === "preferred" ? "Preferred" : "Stated condition"}</span></div><q>{requirement.excerpt}</q></div>)}</div>
               </section>}
               <div className="role-match-panel">
-                <div><strong>Role-family proximity</strong><span>Independent matches, not shares of a forced classification</span></div>
-                <div className="role-match-bars">{decodedRole.role_matches.map((item) => <p key={item.role_family}><span>{item.role_label}</span><i><u style={{ width: `${item.match_score}%` }} /></i><b>{Math.round(item.match_score)}%</b></p>)}</div>
+                <header><div><span className="panel-kicker">Role-family comparison</span><h3>Where this advertisement sits</h3><p>Independent proximity signals, not shares of a forced classification.</p></div><span className="role-match-count">{decodedRole.role_matches.length} families compared</span></header>
+                <div className="role-match-list">{decodedRole.role_matches.map((item, index) => <article className={`role-match-item${index === 0 ? " leading" : ""}`} key={item.role_family}><div className="role-match-item-head"><span className="role-match-rank">0{index + 1}</span><RoleFamilyIcon roleKey={item.role_family} size={17} /><strong>{item.role_label}</strong><span>{index === 0 ? "Closest match" : "Adjacent signal"}</span></div><div className="role-match-meter"><i><u style={{ width: `${Math.max(4, Math.min(100, item.match_score))}%` }} /></i><b>{Math.round(item.match_score)}%</b></div></article>)}</div>
                 {(decodedRole.scope_status !== "matched" || decodedRole.unmapped_skills.length > 0) && <p className="scope-note">{scopeMessage(decodedRole.scope_status)} {decodedRole.unmapped_skills.length > 0 ? `Additional capabilities identified: ${decodedRole.unmapped_skills.join(", ")}.` : ""}</p>}
               </div>
               <div className="comparison-title"><h3>JD capabilities vs your evidence</h3><p>The radar axes are selected from this advertisement itself. Skills that are absent from the JD are not inserted from a role template.</p>{decodedRole.scope_status === "mixed" && <div className="jd-focus" role="group" aria-label="Radar focus"><button type="button" aria-pressed={decoderFocus === "all"} className={decoderFocus === "all" ? "active" : ""} onClick={() => setDecoderFocus("all")}>Full JD</button>{decodedRole.role_matches.filter((item) => item.match_score >= 35).slice(0, 3).map((item) => <button type="button" aria-pressed={decoderFocus === item.role_family} className={decoderFocus === item.role_family ? "active" : ""} key={item.role_family} onClick={() => setDecoderFocus(item.role_family)}>{item.role_label}</button>)}</div>}</div>
@@ -1235,10 +1381,10 @@ export default function App() {
         </div>}
          {view === "evidence" && <div className="tool-page"><header><p className="page-kicker-icon"><Search size={15} />Employer evidence</p><h1>Search current hiring demand</h1><span>Ask a market question and review the underlying New Zealand job records behind the answer.</span></header><section className="tool-panel evidence-search" aria-busy={searchingEvidence || explainingEvidence}><form onSubmit={searchEvidence}><label className="field"><span>Market question or capability</span><input id="evidence-query" required minLength={3} maxLength={500} value={evidenceQuery} onChange={(event) => setEvidenceQuery(event.target.value)} placeholder="e.g. testing expectations for junior data engineers" /></label><button type="submit" className="primary-button" disabled={searchingEvidence}><Search size={15} />{searchingEvidence ? "Searching..." : "Search evidence"}</button></form>{retrievalQuality?.labelled_count ? <div className="retrieval-quality" aria-live="polite"><span>Feedback labels <b>{retrievalQuality.labelled_count}</b></span><span>Relevant <b>{Math.round((retrievalQuality.relevance_rate ?? 0) * 100)}%</b></span><span>Mean relevant rank <b>{retrievalQuality.relevant_mean_rank ?? "-"}</b></span></div> : null}{evidenceResults && evidenceResults.length > 0 && <div className="ai-action"><div><strong>Summarise the findings</strong><span>Create a concise interpretation using only these job records and citations.</span></div><button type="button" className="secondary-button" onClick={explainEvidence} disabled={explainingEvidence}>{explainingEvidence ? "Analysing..." : "Generate summary"}</button></div>}{aiExplanation && <article className="ai-explanation" aria-live="polite"><div><span>Market summary</span><small>{aiExplanation.model}</small></div><p>{aiExplanation.answer}</p></article>}{evidenceResults && <div className="citation-list">{evidenceResults.length ? evidenceResults.map((item, index) => <article className="citation-card" key={item.citation_id}><header className="citation-card-header"><div className="citation-reference"><b>J{index + 1}</b><span><strong>{item.company}</strong><small>{item.location}</small></span></div><span className="citation-date">{item.published_at ? new Date(item.published_at).toLocaleDateString("en-NZ") : "Date unavailable"}</span></header><div className="citation-card-body"><h2>{item.title}</h2><p className="citation-preview">{evidencePreview(item.excerpt)}</p>{item.excerpt.length > 260 && <details className="citation-excerpt"><summary>Read full evidence excerpt</summary><p>{item.excerpt}</p></details>}</div><footer className="citation-card-footer"><div className="citation-feedback"><span className="citation-footer-label">Relevance</span>{judgedEvidence.has(item.citation_id) ? <span className="feedback-saved">Feedback saved</span> : <><button type="button" onClick={() => judgeEvidence(item, true, index + 1)}>Relevant</button><button type="button" onClick={() => judgeEvidence(item, false, index + 1)}>Not relevant</button></>}</div><div className="citation-actions"><button type="button" className="citation-save" disabled={savedJobs.some((job) => job.source_url.replace(/\/$/, "") === item.source_url.replace(/\/$/, ""))} onClick={() => saveEvidenceJob(item)}><Bookmark size={13} />{savedJobs.some((job) => job.source_url.replace(/\/$/, "") === item.source_url.replace(/\/$/, "")) ? "Saved" : "Save role"}</button><a href={item.source_url} target="_blank" rel="noreferrer">View source <ArrowRight size={13} /></a></div></footer></article>) : <div className="market-empty"><Search size={24} /><h2>No matching indexed evidence</h2><p>Try a broader query or remove the current role and location filters from your career profile.</p></div>}</div>}{error && <p className="form-error" role="alert">{error}</p>}</section></div>}
         {view === "market" && <MarketView key={role || "default-market"} market={market} quality={marketQuality} targetRole={role} navigate={navigate} />}
-        {view === "path" && <CareerPathView role={role} market={market} navigate={navigate} />}
-        {view === "graph" && <CapabilityProfileView role={role} evidence={personalEvidence} roleFits={roleFits} selectedRole={selectedProfileRole} onSelectRole={setSelectedProfileRole} navigate={navigate} />}
+        {view === "path" && <CareerPathView key={role || "empty"} role={role} market={market} roleFits={roleFits} navigate={navigate} onSelectRole={setSelectedProfileRole} />}
+        {view === "graph" && <CapabilityProfileView role={role} evidence={personalEvidence} roleFits={roleFits} roleFitsLoading={roleFitsLoading} roleFitsError={roleFitsError} onRetryRoleFits={() => setRoleFitsRefresh((current) => current + 1)} selectedRole={selectedProfileRole} onSelectRole={setSelectedProfileRole} evidenceFilter={profileEvidenceFilter} onSelectEvidenceFilter={setProfileEvidenceFilter} navigate={navigate} />}
         {view === "route" && <Navigate to={productRoutes.graph} replace />}
-        {view === "jobs" && <JobsView jobs={savedJobs} loading={loadingJobs} history={jobHistory} historyJobId={historyJobId} historyLoading={loadingJobHistory} onHistory={toggleJobHistory} onStatus={updateJobStatus} onNotes={updateJobNotes} onDelete={deleteJob} onReview={reviewSavedJob} navigate={navigate} />}
+        {view === "jobs" && <JobsView jobs={savedJobs} loading={loadingJobs} history={jobHistory} historyJobId={historyJobId} historyLoading={loadingJobHistory} comparisonJobIds={comparisonJobIds} comparisonDetails={comparisonDetails} comparisonDetailsLoading={comparisonDetailsLoading} comparisonDetailsError={comparisonDetailsError} onToggleCompare={toggleJobComparison} onClearCompare={() => setComparisonJobIds([])} onHistory={toggleJobHistory} onStatus={updateJobStatus} onNotes={updateJobNotes} onDelete={deleteJob} onReview={reviewSavedJob} navigate={navigate} />}
         {view === "settings" && <AccountSettingsView user={user} onExport={exportAccountData} onDelete={deleteAccount} />}
         {view === "workspace" && <div className="setup-page">
           {(!saved || editingProfile || !role) && <header className="setup-header workspace-page-header">
@@ -1291,7 +1437,9 @@ export default function App() {
             {step === 2 && <>
               <div className="panel-title"><span className="panel-icon"><FileText size={20} /></span><div><h2>Add evidence of your work</h2><p>Use one or more sources. You will review extracted evidence before it affects your profile.</p></div></div>
               <div className="source-list">
-                <div className={`source-row ${cvUploadId ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cvUploadId ? `${cvFilename || cv?.name || "Saved CV"} · ${cvStatus.replaceAll("_", " ")}` : "PDF or DOCX, up to 10 MB"}</p>{cvFailureReason && <small className="source-error">{cvFailureReason}</small>}</div>{cvUploadId ? <span className="source-actions">{["scan_failed", "parse_failed"].includes(cvStatus) && <button className="text-button" type="button" onClick={retryCv}><RefreshCw size={14} />Retry</button>}<button className="icon-action" aria-label="Remove CV" onClick={removeCv}><X size={17} /></button></span> : <label className="upload-button"><UploadCloud size={15} />Choose file<input type="file" accept=".pdf,.docx" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCv(file); }} /></label>}</div>
+                 <div className={`source-row ${cvUploadId ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cvUploadId ? `${cvFilename || cv?.name || "Saved CV"} · ${cvStatus.replaceAll("_", " ")}` : "PDF or DOCX, up to 10 MB"}</p>{cvFailureReason && <small className="source-error">{cvFailureReason}</small>}</div>{cvUploadId ? <span className="source-actions">{["scan_failed", "parse_failed"].includes(cvStatus) && <button className="text-button" type="button" onClick={retryCv}><RefreshCw size={14} />Retry</button>}<button className="icon-action" aria-label="Remove CV" onClick={removeCv}><X size={17} /></button></span> : <label className="upload-button"><UploadCloud size={15} />Choose file<input type="file" accept=".pdf,.docx" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCv(file); }} /></label>}</div>
+                 <div className="cv-version-fields"><label className="field"><span>CV label</span><input value={cvLabel} onChange={(event) => setCvLabel(event.target.value)} placeholder="e.g. Data Engineer version" /></label><label className="field"><span>Target role</span><div className="select-control"><select value={cvTargetRole} onChange={(event) => setCvTargetRole(event.target.value as RoleKey)}><option value="">Use workspace role</option>{Object.entries(roles).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select><ChevronDown size={16} /></div></label></div>
+                 {cvVersions.length > 0 && <div className="cv-version-list"><strong>Saved CV versions</strong>{cvVersions.slice(0, 6).map((version) => <span key={version.id}>{version.cv_label || version.original_filename} · {version.target_role ? roles[version.target_role as Exclude<RoleKey, "">] || version.target_role : "general"} · {version.status.replaceAll("_", " ")}</span>)}</div>}
                 <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub projects</strong><p>Use a profile URL to choose from all public repositories</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://github.com/username" value={github} onChange={(event) => { setGithub(event.target.value); setGithubProjects([]); setGithubCandidates([]); }} /></div></label>
                 {githubCandidates.length > 0 && <div className="github-candidates"><div><strong>Select projects to analyse</strong><span>{selectedGithubUrls.size} selected</span></div>{githubCandidates.map((candidate) => <label key={candidate.url}><input type="checkbox" checked={selectedGithubUrls.has(candidate.url)} onChange={() => setSelectedGithubUrls((current) => { const next = new Set(current); if (next.has(candidate.url)) next.delete(candidate.url); else next.add(candidate.url); return next; })} /><span><b>{candidate.name}</b><small>{candidate.language ?? "Repository"} · {candidate.stars} stars</small></span></label>)}</div>}
                 <label className="source-row"><span className="source-icon"><Link2 size={19} /></span><div><strong>Portfolio or project</strong><p>Optional public URL</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://" value={portfolio} onChange={(event) => setPortfolio(event.target.value)} /></div></label>

@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -137,6 +137,15 @@ app = FastAPI(title=settings.app_name, version="0.1.0")
 _metrics_lock = Lock()
 _request_counts: defaultdict[tuple[str, str, str], int] = defaultdict(int)
 _request_latency_ms: defaultdict[tuple[str, str], float] = defaultdict(float)
+_rate_limit_lock = Lock()
+_rate_limit_buckets: defaultdict[tuple[str, str, int], int] = defaultdict(int)
+_rate_limited_prefixes = {
+    "/api/v1/role-decoder": (30, 60),
+    "/api/v1/rag/search": (30, 60),
+    "/api/v1/rag/explain": (10, 60),
+    "/api/v1/evidence/github": (20, 60),
+    "/api/v1/evidence/uploads": (20, 60),
+}
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -169,6 +178,27 @@ async def request_context(request: Request, call_next):
     """Attach a correlation id to every response without logging personal payloads."""
     request_id = request.headers.get("X-Request-ID") or str(uuid4())
     started = time.perf_counter()
+    if settings.environment == "production" and request.method not in {"OPTIONS", "GET"}:
+        limit_config = next(
+            (config for prefix, config in _rate_limited_prefixes.items() if request.url.path.startswith(prefix)),
+            None,
+        )
+        if limit_config:
+            limit, window = limit_config
+            actor = request.client.host if request.client else "unknown"
+            bucket = int(time.time() // window)
+            key = (actor, request.url.path, bucket)
+            with _rate_limit_lock:
+                _rate_limit_buckets[key] += 1
+                count = _rate_limit_buckets[key]
+                if len(_rate_limit_buckets) > 5000:
+                    _rate_limit_buckets.clear()
+            if count > limit:
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={"detail": "Too many requests. Please retry shortly."},
+                    headers={"Retry-After": str(window)},
+                )
     request.state.request_id = request_id
     response = None
     try:
@@ -1686,6 +1716,8 @@ def initiate_upload(
         original_filename=Path(payload.filename).name,
         content_type=payload.content_type,
         expected_size=payload.size,
+        cv_label=payload.cv_label.strip() if payload.cv_label else None,
+        target_role=payload.target_role,
     )
     db.add(upload)
     audit(db, "evidence.upload_initiated", user_id=user.id, metadata={"upload_id": str(upload_id)})
@@ -1885,24 +1917,51 @@ def evidence_graph(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Unknown role family")
     items = list(db.scalars(
         select(CandidateSkillEvidence)
-        .where(CandidateSkillEvidence.user_id == user.id)
+        .where(
+            CandidateSkillEvidence.user_id == user.id,
+        )
         .order_by(CandidateSkillEvidence.skill_slug)
     ))
+    # Group by the canonical display name as well as the slug. This protects
+    # the profile from legacy rows or taxonomy aliases that represent the same
+    # capability under different identifiers.
+    grouped: defaultdict[str, list[CandidateSkillEvidence]] = defaultdict(list)
+    for item in items:
+        skill_name = SKILLS[item.skill_slug][0].strip().casefold()
+        grouped[skill_name].append(item)
+    evidence = []
+    for records in grouped.values():
+        representative_skill_slug = min(records, key=lambda item: item.skill_slug).skill_slug
+        aggregate = aggregate_evidence_strength(
+            [
+                EvidenceScoreInput(
+                    evidence_level=item.evidence_level,
+                    confidence=item.confidence,
+                    excerpt=item.excerpt,
+                    locator=item.locator,
+                    source_type=item.source_type,
+                    source_reference=f"{item.source_type}:{item.github_project_id or item.upload_id or item.locator}",
+                )
+                for item in records
+            ]
+        )
+        representative = max(records, key=lambda item: (item.evidence_level, item.confidence))
+        source_types = sorted({item.source_type for item in records})
+        evidence.append(
+            SkillEvidenceResponse(
+                skill_slug=representative_skill_slug,
+                skill_name=SKILLS[representative_skill_slug][0],
+                category=SKILLS[representative_skill_slug][1],
+                evidence_level=aggregate.evidence_level,
+                confidence=aggregate.confidence,
+                excerpt=representative.excerpt,
+                locator=representative.locator,
+                source_type=" + ".join(source_types),
+            )
+        )
     return SkillGraphResponse(
         role_family=role_family,
-        evidence=[
-            SkillEvidenceResponse(
-                skill_slug=item.skill_slug,
-                skill_name=SKILLS[item.skill_slug][0],
-                category=SKILLS[item.skill_slug][1],
-                evidence_level=item.evidence_level,
-                confidence=item.confidence,
-                excerpt=item.excerpt,
-                locator=item.locator,
-                source_type=item.source_type,
-            )
-            for item in items
-        ],
+        evidence=sorted(evidence, key=lambda item: (-item.evidence_level, item.skill_name.lower())),
     )
 
 
@@ -2137,6 +2196,7 @@ def export_account(user: Annotated[User, Depends(verified_user)], db: Annotated[
         "document_uploads": [
             {
                 "id": str(item.id), "original_filename": item.original_filename, "content_type": item.content_type,
+                "cv_label": item.cv_label, "target_role": item.target_role,
                 "status": item.status, "created_at": item.created_at.isoformat(),
             }
             for item in uploads

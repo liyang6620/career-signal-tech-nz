@@ -26,6 +26,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-900}
+      EMBEDDING_MODE: ${EMBEDDING_MODE:-semantic}
       SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:?Set SMTP_USERNAME}
@@ -42,7 +43,9 @@ services:
       database:
         condition: service_healthy
       storage:
-        condition: service_started
+        condition: service_healthy
+      antivirus:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
@@ -58,6 +61,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EMBEDDING_MODE: ${EMBEDDING_MODE:-semantic}
       SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:?Set SMTP_USERNAME}
@@ -83,6 +87,11 @@ services:
     volumes:
       - career_signal_storage:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
 
   antivirus:
     image: clamav/clamav:stable

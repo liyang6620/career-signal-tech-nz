@@ -31,7 +31,7 @@ docker compose exec -T database pg_dump -U career_signal -d career_signal -Fc > 
 ## Release checklist
 
 1. Apply Alembic migrations in staging.
-2. Run backend `ruff check app tests` and `pytest`, then frontend lint and build.
+2. Run backend `ruff check app tests` and `pytest`, then frontend lint and build. The production image intentionally omits test dependencies; for a reproducible local backend run use `docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm backend-test`.
 3. Run the browser smoke suite against staging: registration, verification, profile creation, CV review, GitHub review, role analysis restore, save-to-tracker and status update.
 4. Run the RAG retrieval evaluation and review sample warnings before publishing market claims.
 5. Confirm backup freshness, worker queue health, error rate and request latency dashboards.

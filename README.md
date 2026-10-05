@@ -44,7 +44,7 @@ The routed application surfaces are:
 - `/app/evidence` — cited employer-evidence retrieval
 - `/app/pathways` — adjacent career directions
 - `/app/profile` — portable capability report and role-family alignment
-- `/app/applications` — persisted application tracker
+- `/app/jobs` — persisted application tracker
 - `/app/settings` — account, export and deletion controls
 
 The [product scope](docs/product-scope.md) defines users, module boundaries, the role taxonomy, evidence rules and phased delivery.
@@ -52,6 +52,8 @@ The [product scope](docs/product-scope.md) defines users, module boundaries, the
 The current workflow also includes a persisted Application Tracker (`/app/jobs`): a sourced vacancy can be saved from
 Employer Evidence, moved through preparation, application, interview and offer stages, and reopened after the next login.
 Role Decoder runs are stored as user-owned history, while upload jobs expose their durable processing status through the API.
+Each uploaded CV can also carry a human-readable version label and target role, so a user can keep BI, data engineering,
+applied ML and AI product variants in one private evidence workspace.
 
 ## Evidence and profile model
 
@@ -144,13 +146,17 @@ With the default Docker port mapping, API documentation is available at `http://
 ```bash
 cd backend && ruff check app tests && pytest
 cd frontend && npm run lint && npm run build && npm run test:e2e
+# with the API and Docker dependencies running
+powershell -ExecutionPolicy Bypass -File scripts/smoke_test.ps1
+# reproducible backend tests without relying on Windows binary wheels
+docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm backend-test
 ```
 
 CI runs the same checks on every pull request and push to `main`. The browser suite protects public entry, guarded routing, legacy route redirects, the capability profile, application-to-profile navigation, responsive career-path readability and account export.
 
 ## Evidence retrieval
 
-The current RAG foundation indexes governed job descriptions into bounded, versioned chunks using the free local `BAAI/bge-small-en` embedding model with its passage/query modes. Unchanged postings are skipped using their content hash. Retrieval applies optional role-family, location, seniority and publication-window filters before combining PostgreSQL full-text ranking with pgvector cosine ranking through reciprocal-rank fusion.
+The current RAG foundation indexes governed job descriptions into bounded, versioned chunks using the free local `BAAI/bge-small-en` embedding model with its passage/query modes. `EMBEDDING_MODE=semantic` is the default; `hash` is an explicit offline fallback for tests or restricted environments. Unchanged postings are skipped using their content hash. Retrieval applies optional role-family, location, seniority and publication-window filters before combining PostgreSQL full-text ranking with pgvector cosine ranking through reciprocal-rank fusion.
 
 `POST /api/v1/rag/index` is protected by the ingestion credential. `POST /api/v1/rag/search` is available to verified users and returns excerpts with stable citation labels, original job URLs, publication dates and retrieval scores. It does not generate an answer or a market claim. The first indexing run downloads the local model into a persistent Docker cache volume; no OpenAI key is used.
 

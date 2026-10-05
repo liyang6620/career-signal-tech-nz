@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import math
 import re
 from collections.abc import Callable, Iterable
@@ -11,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .models import JobChunk, JobPosting
+
+logger = logging.getLogger(__name__)
 
 Embedder = Callable[[list[str]], list[list[float]]]
 
@@ -60,7 +63,8 @@ def embed_passages(values: list[str]) -> list[list[float]]:
         return fallback_vectors(values)
     try:
         return checked_vectors(embedding_model().passage_embed(values))
-    except (RuntimeError, ValueError, OSError):
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.warning("Semantic embedding unavailable; using lexical fallback: %s", exc)
         return fallback_vectors(values)
 
 
@@ -69,7 +73,8 @@ def embed_query(value: str) -> list[float]:
         return fallback_vectors([value])[0]
     try:
         return checked_vectors(embedding_model().query_embed(value))[0]
-    except (RuntimeError, ValueError, OSError):
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.warning("Semantic query embedding unavailable; using lexical fallback: %s", exc)
         return fallback_vectors([value])[0]
 
 

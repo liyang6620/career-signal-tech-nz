@@ -209,6 +209,8 @@ class EvidenceUpload(Base):
     original_filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(100))
     expected_size: Mapped[int] = mapped_column()
+    cv_label: Mapped[str | None] = mapped_column(String(160))
+    target_role: Mapped[str | None] = mapped_column(String(80), index=True)
     actual_size: Mapped[int | None] = mapped_column()
     status: Mapped[str] = mapped_column(String(30), default="pending_upload", index=True)
     failure_reason: Mapped[str | None] = mapped_column(String(255))

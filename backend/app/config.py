@@ -33,7 +33,9 @@ class Settings(BaseSettings):
     ingestion_api_key: str = "development-ingestion-key"
     # This model has a stable fastembed/Qdrant distribution and 384 dimensions.
     embedding_model: str = "BAAI/bge-small-en"
-    embedding_mode: str = "hash"
+    # Semantic vectors are the product default. Use EMBEDDING_MODE=hash only
+    # for offline tests or an intentionally lexical-only deployment.
+    embedding_mode: str = "semantic"
     embedding_cache_path: str = ".cache/fastembed"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
