@@ -417,7 +417,7 @@ function SavedRoleComparison({ jobs, details, loading, failed, onToggleCompare }
   return <section className="jobs-compare-panel" aria-labelledby="jobs-compare-title"><header><div><span className="panel-kicker">Role comparison</span><h2 id="jobs-compare-title">Compare saved roles here</h2><p>This comparison stays in Applications: requirements, evidence coverage and priority signals are shown side by side without sending you back to Profile.</p></div><span className="jobs-compare-count">{jobs.length} selected</span></header><div className="jobs-compare-grid">{jobs.map((job) => <article key={job.id}><div className="jobs-compare-card-head"><span>{job.role_family && roles[job.role_family as Exclude<RoleKey, "">] ? roles[job.role_family as Exclude<RoleKey, "">] : "Role analysis"}</span><button type="button" aria-label={`Remove ${job.title} from comparison`} onClick={() => onToggleCompare(job)}><X size={15} /></button></div><h3>{job.title}</h3><p>{job.company} · {job.location}</p><div className="jobs-compare-readiness"><strong>{job.skill_count ? `${job.evidenced_skill_count}/${job.skill_count}` : "—"}</strong><span>evidence covered</span><i><u style={{ width: `${job.skill_count ? Math.max(4, Math.min(100, (job.evidenced_skill_count / job.skill_count) * 100)) : 4}%` }} /></i></div><small>{job.status === "saved" ? "Ready to review" : applicationStageLabels[job.status]}{job.top_gaps.length ? ` · Next: ${job.top_gaps.slice(0, 2).join(", ")}` : ""}</small><div className="jobs-compare-requirements"><span>Top requirements</span>{details[job.id]?.skill_demands.slice(0, 4).map((demand) => <b key={demand.slug}>{demand.name}<small>{Math.round(demand.demand_score)} · {demand.importance}</small></b>)}{!details[job.id] && <small>{loading ? "Loading saved analysis..." : "Analysis details unavailable"}</small>}</div></article>)}</div>{loading && <div className="jobs-compare-state"><RefreshCw size={16} className="spin" />Loading saved analysis details</div>}{failed && !loading && <div className="jobs-compare-state"><span>Some saved analysis details could not be loaded. The evidence coverage above is still available.</span></div>}{!loading && !failed && capabilities.length > 0 && <section className="jobs-compare-matrix" aria-labelledby="jobs-compare-matrix-title"><header><div><span className="panel-kicker">Requirement matrix</span><h3 id="jobs-compare-matrix-title">What each job is asking for</h3></div><small>Higher values indicate stronger demand in that advertisement.</small></header><div className="jobs-compare-matrix-table"><div className="jobs-compare-matrix-head"><strong>Capability</strong>{jobs.map((job) => <span key={job.id}>{job.title}</span>)}</div>{capabilities.map(([slug, capability]) => <div className="jobs-compare-matrix-row" key={slug}><strong>{capability.name}</strong>{jobs.map((job) => { const demand = capability.jobs.get(job.id); return <span className={demand ? "present" : "absent"} key={job.id}>{demand ? `${Math.round(demand.demand_score)} · ${demand.importance}` : "Not detected"}</span>; })}</div>)}</div></section>}</section>;
 }
 
-function JobsView({ jobs, loading, history, historyJobId, historyLoading, comparisonJobIds, comparisonDetails, comparisonDetailsLoading, comparisonDetailsError, onToggleCompare, onClearCompare, onHistory, onStatus, onNotes, onDelete, onReview, navigate }: { jobs: SavedJob[]; loading: boolean; history: JobStatusEvent[]; historyJobId: string | null; historyLoading: boolean; comparisonJobIds: string[]; comparisonDetails: AnalysisDetailsMap; comparisonDetailsLoading: boolean; comparisonDetailsError: boolean; onToggleCompare: (job: SavedJob) => void; onClearCompare: () => void; onHistory: (job: SavedJob) => void; onStatus: (job: SavedJob, status: SavedJob["status"]) => void; onNotes: (job: SavedJob, notes: string) => void; onDelete: (job: SavedJob) => void; onReview: (job: SavedJob) => void; navigate: (path: string) => void }) {
+function JobsView({ jobs, loading, history, historyJobId, historyLoading, comparisonJobIds, comparisonDetails, comparisonDetailsLoading, comparisonDetailsError, onToggleCompare, onClearCompare, onHistory, onStatus, onNotes, onDelete, onReview, onOpenAnalysis, navigate }: { jobs: SavedJob[]; loading: boolean; history: JobStatusEvent[]; historyJobId: string | null; historyLoading: boolean; comparisonJobIds: string[]; comparisonDetails: AnalysisDetailsMap; comparisonDetailsLoading: boolean; comparisonDetailsError: boolean; onToggleCompare: (job: SavedJob) => void; onClearCompare: () => void; onHistory: (job: SavedJob) => void; onStatus: (job: SavedJob, status: SavedJob["status"]) => void; onNotes: (job: SavedJob, notes: string) => void; onDelete: (job: SavedJob) => void; onReview: (job: SavedJob) => void; onOpenAnalysis: (job: SavedJob) => void; navigate: (path: string) => void }) {
   const active = jobs.filter((job) => !["rejected", "archived"].includes(job.status));
   const [compareMode, setCompareMode] = useState(comparisonJobIds.length > 0);
   const comparisonJobs = jobs.filter((job) => comparisonJobIds.includes(job.id));
@@ -434,7 +434,7 @@ function JobsView({ jobs, loading, history, historyJobId, historyLoading, compar
       {loading ? <div className="jobs-empty"><RefreshCw size={22} className="spin" /><h3>Loading your applications</h3></div> : jobs.length ? <div className="jobs-table" role="table" aria-label="Saved job applications">
          <div className="jobs-table-head" role="row"><span>Opportunity</span><span>Evidence readiness</span><span>Stage</span><span>Actions</span></div>
         {jobs.map((job) => <article className="jobs-row" role="row" key={job.id}>
-          <div>{compareMode && <label className="job-compare-toggle"><input type="checkbox" checked={comparisonJobIds.includes(job.id)} onChange={() => onToggleCompare(job)} disabled={!comparisonJobIds.includes(job.id) && comparisonJobIds.length >= 3} /><span>Compare</span></label>}<a href={job.analysis_id ? productRoutes.decoder : job.source_url} target={job.analysis_id ? undefined : "_blank"} rel={job.analysis_id ? undefined : "noreferrer"} onClick={job.analysis_id ? (event) => { event.preventDefault(); navigate(productRoutes.decoder); } : undefined}>{job.title}</a><span>{job.company} · {job.analysis_id ? "Saved analysis" : job.location}</span><small>{job.analysis_id ? job.location : ""}</small></div>
+          <div>{compareMode && <label className="job-compare-toggle"><input type="checkbox" checked={comparisonJobIds.includes(job.id)} onChange={() => onToggleCompare(job)} disabled={!comparisonJobIds.includes(job.id) && comparisonJobIds.length >= 3} /><span>Compare</span></label>}<a href={job.analysis_id ? productRoutes.decoder : job.source_url} target={job.analysis_id ? undefined : "_blank"} rel={job.analysis_id ? undefined : "noreferrer"} onClick={job.analysis_id ? (event) => { event.preventDefault(); onOpenAnalysis(job); } : undefined}>{job.title}</a><span>{job.company} · {job.analysis_id ? "Saved analysis" : job.location}</span><small>{job.analysis_id ? job.location : ""}</small></div>
           <div className="job-readiness">{job.skill_count > 0 ? <><strong>{job.evidenced_skill_count} / {job.skill_count}</strong><span>capabilities evidenced</span>{job.top_gaps.length > 0 && <small>Next: {job.top_gaps.slice(0, 2).join(", ")}</small>}</> : <><strong>Review needed</strong><span>Compare the full advertisement</span></>}</div>
           <label><span className="sr-only">Application status for {job.title}</span><select value={job.status} onChange={(event) => onStatus(job, event.target.value as SavedJob["status"])}>{applicationStages.map((stage) => <option key={stage} value={stage}>{applicationStageLabels[stage]}</option>)}</select></label>
           <div className="job-row-actions"><button type="button" className="secondary-button job-plan-button" onClick={() => onReview(job)}><FileCheck2 size={13} />{job.analysis_id ? "Review fit" : "Compare first"}</button><button type="button" className="text-button" onClick={() => onHistory(job)} aria-expanded={historyJobId === job.id}><History size={13} />{historyJobId === job.id ? "Hide" : "History"}</button><button type="button" className="text-button" onClick={() => { const notes = window.prompt("Notes for this opportunity", job.notes ?? ""); if (notes !== null) onNotes(job, notes); }}>Notes</button><button type="button" className="text-button danger-button" onClick={() => onDelete(job)}>Remove</button></div>
@@ -846,7 +846,18 @@ export default function App() {
           updatedJobs.set(result.value.job.id, result.value.job);
         } else failed = true;
       });
-      if (updatedJobs.size) setSavedJobs((current) => current.map((job) => updatedJobs.get(job.id) ?? job));
+      if (updatedJobs.size) {
+        setSavedJobs((current) => {
+          let changed = false;
+          const next = current.map((job) => {
+            const updated = updatedJobs.get(job.id);
+            if (!updated || updated.analysis_id === job.analysis_id) return job;
+            changed = true;
+            return updated;
+          });
+          return changed ? next : current;
+        });
+      }
       setComparisonDetails(next);
       setComparisonDetailsError(failed);
     })().catch(() => {
@@ -1191,6 +1202,18 @@ export default function App() {
     navigate(productRoutes.graph);
   }
 
+  async function openSavedAnalysis(job: SavedJob) {
+    if (!job.analysis_id) {
+      setDecoderTitle(job.title);
+      setDecoderDescription(job.description ?? "");
+      setDecodedRole(null);
+      navigate(productRoutes.decoder);
+      return;
+    }
+    await restoreAnalysis(job.analysis_id);
+    navigate(productRoutes.decoder);
+  }
+
   async function toggleJobHistory(job: SavedJob) {
     if (!token) return;
     if (historyJobId === job.id) {
@@ -1398,7 +1421,7 @@ export default function App() {
         {view === "path" && <CareerPathView key={role || "empty"} role={role} market={market} roleFits={roleFits} navigate={navigate} onSelectRole={setSelectedProfileRole} />}
         {view === "graph" && <CapabilityProfileView role={role} evidence={personalEvidence} roleFits={roleFits} roleFitsLoading={roleFitsLoading} roleFitsError={roleFitsError} onRetryRoleFits={() => setRoleFitsRefresh((current) => current + 1)} selectedRole={selectedProfileRole} onSelectRole={setSelectedProfileRole} evidenceFilter={profileEvidenceFilter} onSelectEvidenceFilter={setProfileEvidenceFilter} navigate={navigate} />}
         {view === "route" && <Navigate to={productRoutes.graph} replace />}
-        {view === "jobs" && <JobsView jobs={savedJobs} loading={loadingJobs} history={jobHistory} historyJobId={historyJobId} historyLoading={loadingJobHistory} comparisonJobIds={comparisonJobIds} comparisonDetails={comparisonDetails} comparisonDetailsLoading={comparisonDetailsLoading} comparisonDetailsError={comparisonDetailsError} onToggleCompare={toggleJobComparison} onClearCompare={() => setComparisonJobIds([])} onHistory={toggleJobHistory} onStatus={updateJobStatus} onNotes={updateJobNotes} onDelete={deleteJob} onReview={reviewSavedJob} navigate={navigate} />}
+        {view === "jobs" && <JobsView jobs={savedJobs} loading={loadingJobs} history={jobHistory} historyJobId={historyJobId} historyLoading={loadingJobHistory} comparisonJobIds={comparisonJobIds} comparisonDetails={comparisonDetails} comparisonDetailsLoading={comparisonDetailsLoading} comparisonDetailsError={comparisonDetailsError} onToggleCompare={toggleJobComparison} onClearCompare={() => setComparisonJobIds([])} onHistory={toggleJobHistory} onStatus={updateJobStatus} onNotes={updateJobNotes} onDelete={deleteJob} onReview={reviewSavedJob} onOpenAnalysis={openSavedAnalysis} navigate={navigate} />}
         {view === "settings" && <AccountSettingsView user={user} onExport={exportAccountData} onDelete={deleteAccount} />}
         {view === "workspace" && <div className="setup-page">
           {(!saved || editingProfile || !role) && <header className="setup-header workspace-page-header">

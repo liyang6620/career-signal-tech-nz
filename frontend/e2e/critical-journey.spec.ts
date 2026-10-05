@@ -181,8 +181,21 @@ test("a saved opportunity opens the shared capability profile", async ({ page })
   await expectNoSeriousAccessibilityViolations(page);
 });
 
+test("saved role titles restore their analysis instead of opening a blank decoder", async ({ page }) => {
+  await mockAuthenticatedApi(page);
+  await page.goto("/app/jobs");
+
+  await page.getByRole("link", { name: "Graduate Data Engineer" }).click();
+  await expect(page).toHaveURL(/\/app\/roles\/decode$/);
+  await expect(page.getByRole("heading", { name: "Data Engineer / Analytics Engineer" })).toBeVisible();
+});
+
 test("saved roles can be compared side by side", async ({ page }) => {
   await mockAuthenticatedApi(page);
+  let detailRequests = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("/api/v1/role-decoder/history/")) detailRequests += 1;
+  });
   await page.goto("/app/jobs");
 
   await page.getByRole("button", { name: "Compare saved roles" }).click();
@@ -193,6 +206,8 @@ test("saved roles can be compared side by side", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "What each job is asking for" })).toBeVisible();
   await expect(page.getByText("SQL", { exact: true })).toBeVisible();
   await expect(page.getByText("Python", { exact: true })).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(detailRequests).toBe(2);
 });
 
 test("career path rows remain readable across responsive layouts", async ({ page }) => {
