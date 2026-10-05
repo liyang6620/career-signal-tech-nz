@@ -3057,6 +3057,18 @@ body { background: var(--canvas); color: var(--ink); }
 .jobs-compare-matrix-row > span.present { color: var(--accent-dark); font-weight: 700; }
 .jobs-compare-matrix-row > span.absent { color: #9aa9a5; }
 .jobs-compare-state { display: flex; align-items: center; gap: 8px; padding: 0 22px 17px; color: var(--muted); font-size: 12px; }
+.jobs-decision-factors { margin: 18px 0; border: 1px solid var(--line); background: #fff; }
+.jobs-decision-factors > header { padding: 18px 22px 14px; border-bottom: 1px solid var(--line-soft); }
+.jobs-decision-factors h2 { margin: 5px 0 0; font-family: var(--serif); font-size: 20px; font-weight: 500; }
+.jobs-decision-factors header p { max-width: 720px; margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.jobs-decision-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.jobs-decision-grid article { padding: 16px 20px; border-right: 1px solid var(--line-soft); }
+.jobs-decision-grid article:last-child { border-right: 0; }
+.jobs-decision-grid h3 { margin: 0 0 12px; font-size: 14px; }
+.jobs-decision-grid dl { display: flex; justify-content: space-between; gap: 12px; margin: 7px 0; font-size: 12px; }
+.jobs-decision-grid dt { color: var(--soft); }
+.jobs-decision-grid dd { margin: 0; color: var(--ink); font-weight: 700; text-align: right; }
+.jobs-comparison-warning { margin: 14px 0 0; color: #80672e; font-size: 11px; line-height: 1.4; }
 .job-compare-toggle { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 7px; color: var(--accent); font-size: 11px; font-weight: 700; }
 .job-compare-toggle input { accent-color: var(--accent); }
 
@@ -3103,7 +3115,7 @@ body { background: var(--canvas); color: var(--ink); }
 .pathway-planner-footer svg { flex: none; margin-top: 1px; color: var(--accent); }
 
 @media (max-width: 760px) {
-  .role-match-list, .jobs-compare-grid, .pathway-route-grid { grid-template-columns: 1fr; }
+  .role-match-list, .jobs-compare-grid, .jobs-decision-grid, .pathway-route-grid { grid-template-columns: 1fr; }
   .role-match-panel > header, .jobs-compare-panel > header, .pathway-planner-head, .pathway-step-label { display: block; }
   .role-match-count, .jobs-compare-count, .pathway-step-label > small { display: block; margin-top: 8px; }
   .profile-graph-frame > header, .personal-graph-frame > header { display: block; }

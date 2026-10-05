@@ -2,6 +2,7 @@
 import hashlib
 import json
 import logging
+import re
 import time
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
@@ -1253,6 +1254,65 @@ def get_profile(
     return profile_response(profile)
 
 
+def comparison_skill_demands(role_family: str, skill_demands: list[dict]) -> tuple[list[dict], bool]:
+    """Keep comparison useful when a short advert contains no named technologies."""
+    if skill_demands or role_family not in ROLE_REQUIREMENTS:
+        return skill_demands, False
+    benchmark = []
+    for slug, weight, required in ROLE_REQUIREMENTS[role_family]:
+        name = SKILLS.get(slug, (slug.replace("-", " ").title(), "", ()))[0]
+        benchmark.append({
+            "slug": slug,
+            "name": name,
+            "required": required,
+            "importance": "essential" if required else "named",
+            "role_families": [role_family],
+            "mention_count": 0,
+            "demand_score": round(min(100, 35 + weight * 25), 1),
+            "explicit_mention": 0,
+            "repetition_signal": 0,
+            "requirement_signal": 0,
+            "title_signal": 0,
+            "evidence_level": 0,
+            "evidence_score": 0,
+            "evidence_confidence": 0,
+            "source_count": 0,
+            "source_type_count": 0,
+            "evidence_base_score": 0,
+            "confidence_adjustment": 0,
+            "specificity_bonus": 0,
+            "verification_bonus": 0,
+            "outcome_bonus": 0,
+            "corroboration_bonus": 0,
+            "diversity_bonus": 0,
+            "score_factors": [],
+            "signal_source": "role_benchmark",
+        })
+    return benchmark, True
+
+
+def saved_job_comparison_facts(job: SavedJob) -> list[dict[str, str]]:
+    text = " ".join(part for part in (job.title, job.description or "") if part)
+    facts: list[dict[str, str]] = [{"label": "Location", "value": job.location, "source": "saved record"}]
+    salary = re.search(r"NZ\$\s?[\d,]+(?:\s*[–-]\s*NZ?\$?\s?[\d,]+)?(?:\s+per\s+(?:year|annum))?", text, re.I)
+    if salary:
+        facts.append({"label": "Compensation", "value": salary.group(0), "source": "advertisement text"})
+    if re.search(r"hybrid", text, re.I):
+        facts.append({"label": "Work model", "value": "Hybrid", "source": "advertisement text"})
+    elif re.search(r"remote", text, re.I):
+        facts.append({"label": "Work model", "value": "Remote", "source": "advertisement text"})
+    elif re.search(r"on[- ]site|office[- ]based", text, re.I):
+        facts.append({"label": "Work model", "value": "On-site", "source": "advertisement text"})
+    if re.search(r"full[- ]time", text, re.I):
+        contract = "Full-time"
+        if re.search(r"fixed[- ]term", text, re.I):
+            contract += " · fixed term"
+        facts.append({"label": "Engagement", "value": contract, "source": "advertisement text"})
+    elif re.search(r"part[- ]time", text, re.I):
+        facts.append({"label": "Engagement", "value": "Part-time", "source": "advertisement text"})
+    return facts
+
+
 def saved_job_response(db: Session, job: SavedJob) -> SavedJobResponse:
     """Add a current, evidence-based preparation summary without storing another score."""
     skill_demands: list[dict] = []
@@ -1264,6 +1324,7 @@ def saved_job_response(db: Session, job: SavedJob) -> SavedJobResponse:
                 skill_demands = [item.model_dump() for item in result.skill_demands]
             except (TypeError, ValueError):
                 skill_demands = []
+    skill_demands, used_benchmark = comparison_skill_demands(job.role_family or "", skill_demands)
     slugs = {str(item["slug"]) for item in skill_demands}
     evidence = aggregate_candidate_evidence(list(db.scalars(
         select(CandidateSkillEvidence).where(
@@ -1289,6 +1350,12 @@ def saved_job_response(db: Session, job: SavedJob) -> SavedJobResponse:
         "evidenced_skill_count": evidenced_count,
         "skill_count": len(slugs),
         "top_gaps": [item[3] for item in ranked_gaps[:3]],
+        "comparison_facts": saved_job_comparison_facts(job),
+        "comparison_warning": (
+            "No named technical requirements were found in this advertisement. "
+            "The comparison uses the role-family benchmark until fuller advert text is available."
+            if used_benchmark else None
+        ),
     })
 
 
@@ -1705,7 +1772,11 @@ def role_decoder_history_detail(
         result = RoleDecodeResponse.model_validate(json.loads(analysis.result_json))
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Saved role analysis is invalid") from exc
-    result.analysis_id = analysis.id
+    benchmark_demands, _ = comparison_skill_demands(
+        analysis.role_family,
+        [item.model_dump() for item in result.skill_demands],
+    )
+    result = result.model_copy(update={"analysis_id": analysis.id, "skill_demands": benchmark_demands})
     return JobAnalysisDetailResponse(
         id=analysis.id,
         title=analysis.title,

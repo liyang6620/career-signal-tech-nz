@@ -334,6 +334,7 @@ class DecodedSkillDemand(BaseModel):
     corroboration_bonus: float
     diversity_bonus: float
     score_factors: list[str] = Field(default_factory=list)
+    signal_source: Literal["advertisement", "role_benchmark"] = "advertisement"
 
 
 class RoleFamilyMatch(BaseModel):
@@ -466,6 +467,8 @@ class SavedJobResponse(BaseModel):
     evidenced_skill_count: int = 0
     skill_count: int = 0
     top_gaps: list[str] = Field(default_factory=list)
+    comparison_facts: list[dict[str, str]] = Field(default_factory=list)
+    comparison_warning: str | None = None
     created_at: datetime
     updated_at: datetime
 
