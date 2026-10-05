@@ -1397,6 +1397,35 @@ def update_saved_job(
     return saved_job_response(db, job)
 
 
+@app.post("/api/v1/jobs/{job_id}/analysis", response_model=SavedJobResponse)
+def ensure_saved_job_analysis(
+    job_id: UUID,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> SavedJobResponse:
+    """Create the comparison record for a saved vacancy that predates analysis persistence."""
+    job = db.scalar(select(SavedJob).where(SavedJob.id == job_id, SavedJob.user_id == user.id))
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved job not found")
+    if job.analysis_id is not None:
+        return saved_job_response(db, job)
+    if not job.description or len(job.description.strip()) < 40:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="This saved job does not contain enough advertisement text to compare",
+        )
+    decoded = role_decoder(
+        RoleDecodeRequest(title=job.title, description=job.description),
+        user,
+        db,
+    )
+    job.analysis_id = decoded.analysis_id
+    job.role_family = decoded.role_family
+    db.commit()
+    db.refresh(job)
+    return saved_job_response(db, job)
+
+
 @app.post("/api/v1/jobs/from-analysis/{analysis_id}", response_model=SavedJobResponse, status_code=status.HTTP_201_CREATED)
 def save_role_analysis_as_job(
     analysis_id: UUID,

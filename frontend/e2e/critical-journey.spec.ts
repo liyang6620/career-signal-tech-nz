@@ -56,6 +56,34 @@ const savedJob = {
   created_at: "2026-10-02T00:00:00Z",
   updated_at: "2026-10-02T00:00:00Z",
 };
+const comparisonJob = {
+  ...savedJob,
+  id: "00000000-0000-0000-0000-000000000022",
+  analysis_id: "00000000-0000-0000-0000-000000000023",
+  title: "Junior Analytics Engineer",
+  company: "Second Example NZ",
+  source_url: "https://jobs.example.nz/analytics-engineer",
+  skill_count: 4,
+  evidenced_skill_count: 1,
+  top_gaps: ["dbt"],
+};
+const savedAnalysisDetail = {
+  analysis_id: savedJob.analysis_id,
+  role_family: "data-engineer",
+  role_label: "Data Engineer / Analytics Engineer",
+  confidence: 0.88,
+  seniority: "Graduate / Junior",
+  scope_status: "matched",
+  taxonomy_coverage: 0.9,
+  matched_skills: [],
+  skill_demands: [
+    { slug: "sql", name: "SQL", required: true, importance: "essential", role_families: ["data-engineer"], mention_count: 3, demand_score: 82, explicit_mention: 1, repetition_signal: 0.7, requirement_signal: 0.8, title_signal: 0, evidence_level: 3, evidence_score: 74, evidence_confidence: 0.9, source_count: 2, source_type_count: 2, evidence_base_score: 70, confidence_adjustment: 4, corroboration_bonus: 0, diversity_bonus: 0 },
+    { slug: "python", name: "Python", required: true, importance: "named", role_families: ["data-engineer"], mention_count: 2, demand_score: 64, explicit_mention: 1, repetition_signal: 0.4, requirement_signal: 0.5, title_signal: 0, evidence_level: 2, evidence_score: 58, evidence_confidence: 0.8, source_count: 2, source_type_count: 2, evidence_base_score: 55, confidence_adjustment: 3, corroboration_bonus: 0, diversity_bonus: 0 },
+  ],
+  role_matches: [],
+  unmapped_skills: [],
+  eligibility_requirements: [],
+};
 
 async function expectNoSeriousAccessibilityViolations(page: Page) {
   const results = await new AxeBuilder({ page }).analyze();
@@ -72,7 +100,8 @@ async function mockAuthenticatedApi(page: Page) {
     if (path === "/api/v1/evidence/uploads") return route.fulfill({ json: [] });
     if (path === "/api/v1/evidence/graph") return route.fulfill({ json: { role_family: "data-engineer", evidence: [{ skill_slug: "sql", skill_name: "SQL", category: "data", evidence_level: 3, confidence: 0.9, excerpt: "Built a tested query workflow", locator: "README.md", source_type: "github" }, { skill_slug: "sql", skill_name: "SQL", category: "data", evidence_level: 2, confidence: 0.8, excerpt: "Used SQL in reporting", locator: "CV.pdf", source_type: "cv" }, { skill_slug: "python", skill_name: "Python", category: "programming", evidence_level: 2, confidence: 0.8, excerpt: "Implemented a data pipeline", locator: "CV.pdf", source_type: "cv" }, { skill_slug: "python", skill_name: "Python", category: "programming", evidence_level: 2, confidence: 0.7, excerpt: "Used Python in a project", locator: "README.md", source_type: "github" }] } });
     if (path === "/api/v1/evidence/fit") return route.fulfill({ json: fit });
-    if (path === "/api/v1/jobs" && request.method() === "GET") return route.fulfill({ json: [savedJob] });
+    if (path === "/api/v1/jobs" && request.method() === "GET") return route.fulfill({ json: [savedJob, comparisonJob] });
+    if (path.startsWith("/api/v1/role-decoder/history/") && request.method() === "GET") return route.fulfill({ json: { result: savedAnalysisDetail } });
     if (path === `/api/v1/jobs/${savedJob.id}` && request.method() === "PATCH") {
       const body = request.postDataJSON() as { status: string };
       return route.fulfill({ json: { ...savedJob, status: body.status } });
@@ -149,6 +178,21 @@ test("a saved opportunity opens the shared capability profile", async ({ page })
 
   await expect(page).toHaveURL(/\/app\/profile$/);
   await expect(page.getByRole("heading", { name: "How your evidence travels across roles" })).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("saved roles can be compared side by side", async ({ page }) => {
+  await mockAuthenticatedApi(page);
+  await page.goto("/app/jobs");
+
+  await page.getByRole("button", { name: "Compare saved roles" }).click();
+  const toggles = page.locator(".job-compare-toggle input");
+  await toggles.nth(0).check();
+  await toggles.nth(1).check();
+
+  await expect(page.getByRole("heading", { name: "What each job is asking for" })).toBeVisible();
+  await expect(page.getByText("SQL", { exact: true })).toBeVisible();
+  await expect(page.getByText("Python", { exact: true })).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
 });
 

@@ -811,7 +811,7 @@ export default function App() {
       return;
     }
     let active = true;
-    const selectedJobs = savedJobs.filter((job) => comparisonJobIds.includes(job.id) && job.analysis_id);
+    const selectedJobs = savedJobs.filter((job) => comparisonJobIds.includes(job.id));
     if (!selectedJobs.length) {
       setComparisonDetails({});
       setComparisonDetailsLoading(false);
@@ -821,22 +821,36 @@ export default function App() {
     setComparisonDetailsLoading(true);
     setComparisonDetailsError(false);
     const headers = { Authorization: `Bearer ${token}` };
-    Promise.allSettled(selectedJobs.map(async (job) => {
-      const response = await fetch(`${API_URL}/api/v1/role-decoder/history/${job.analysis_id}`, { headers });
-      if (!response.ok) throw new Error(`Saved analysis request failed: ${response.status}`);
-      const payload = await response.json() as { result?: DecodedRole };
-      if (!payload.result) throw new Error("Saved analysis result missing");
-      return [job.id, payload.result] as const;
-    })).then((results) => {
+    (async () => {
+      const results = await Promise.allSettled(selectedJobs.map(async (job) => {
+        let current = job;
+        if (!current.analysis_id) {
+          const ensureResponse = await fetch(`${API_URL}/api/v1/jobs/${job.id}/analysis`, { method: "POST", headers });
+          const ensured = await apiPayload(ensureResponse) as SavedJob | { detail?: unknown } | null;
+          if (!ensureResponse.ok || !ensured || !("id" in ensured)) throw new Error(apiError(ensured, "Saved job could not be prepared for comparison"));
+          current = ensured as SavedJob;
+        }
+        const response = await fetch(`${API_URL}/api/v1/role-decoder/history/${current.analysis_id}`, { headers });
+        if (!response.ok) throw new Error(`Saved analysis request failed: ${response.status}`);
+        const payload = await response.json() as { result?: DecodedRole };
+        if (!payload.result) throw new Error("Saved analysis result missing");
+        return { id: job.id, job: current, result: payload.result };
+      }));
       if (!active) return;
       const next: AnalysisDetailsMap = {};
       let failed = false;
+      const updatedJobs = new Map<string, SavedJob>();
       results.forEach((result) => {
-        if (result.status === "fulfilled") next[result.value[0]] = result.value[1];
-        else failed = true;
+        if (result.status === "fulfilled") {
+          next[result.value.id] = result.value.result;
+          updatedJobs.set(result.value.job.id, result.value.job);
+        } else failed = true;
       });
+      if (updatedJobs.size) setSavedJobs((current) => current.map((job) => updatedJobs.get(job.id) ?? job));
       setComparisonDetails(next);
       setComparisonDetailsError(failed);
+    })().catch(() => {
+      if (active) setComparisonDetailsError(true);
     }).finally(() => {
       if (active) setComparisonDetailsLoading(false);
     });
