@@ -179,7 +179,16 @@ def _structure_signals(snapshot: GithubSnapshot) -> dict[str, tuple[int, float, 
     python_manifest = "\n".join(
         value
         for path, value in snapshot.artifacts.items()
-        if path.casefold().endswith(("pyproject.toml", "requirements.txt", "requirements-dev.txt", "poetry.lock", "pipfile", "pipfile.lock"))
+        if path.casefold().endswith(
+            (
+                "pyproject.toml",
+                "requirements.txt",
+                "requirements-dev.txt",
+                "poetry.lock",
+                "pipfile",
+                "pipfile.lock",
+            )
+        )
     )
     if re.search(r'["\']react["\']', package_text, re.I) and any(path.endswith((".jsx", ".tsx")) for path in paths):
         add("react", 3, 0.9, "React dependency is supported by JSX/TSX implementation files")
@@ -199,7 +208,12 @@ def _structure_signals(snapshot: GithubSnapshot) -> dict[str, tuple[int, float, 
             continue
         source_extensions = (".js", ".jsx", ".ts", ".tsx") if slug in {"next-js", "node-js", "tailwind"} else (".py",)
         if any(path.endswith(source_extensions) for path in paths):
-            add(slug, 3, 0.9, f"{SKILLS[slug][0]} is declared in a dependency manifest and supported by implementation files")
+            add(
+                slug,
+                3,
+                0.9,
+                f"{SKILLS[slug][0]} is declared in a dependency manifest and supported by implementation files",
+            )
 
     docker_files = [
         path for path in paths if path.rsplit("/", 1)[-1] in {"dockerfile", "docker-compose.yml", "docker-compose.yaml"}
@@ -245,7 +259,11 @@ def _structure_signals(snapshot: GithubSnapshot) -> dict[str, tuple[int, float, 
         if path.endswith((".tf", ".tfvars", "serverless.yml", "serverless.yaml"))
         or path.rsplit("/", 1)[-1].casefold() in {"template.yaml", "template.yml", "samconfig.toml"}
     ]
-    if aws_files and re.search(r"\b(aws|amazonaws|serverless|cloudformation|sam)\b", artifact_text + "\n" + "\n".join(paths), re.I):
+    if aws_files and re.search(
+        r"\b(aws|amazonaws|serverless|cloudformation|sam)\b",
+        artifact_text + "\n" + "\n".join(paths),
+        re.I,
+    ):
         add("aws", 3, 0.88, f"AWS infrastructure configuration found ({', '.join(aws_files[:3])})")
     terraform_files = [path for path in paths if path.endswith((".tf", ".tfvars"))]
     if terraform_files:

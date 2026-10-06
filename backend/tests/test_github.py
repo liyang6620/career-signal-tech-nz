@@ -70,7 +70,10 @@ def test_infrastructure_files_surface_cloud_and_terraform_evidence() -> None:
         topics=[],
         readme="",
         files=("main.tf", "variables.tf", "serverless.yml", ".github/workflows/deploy.yml"),
-        artifacts={"main.tf": 'provider "aws" {}\nresource "aws_lambda_function" "api" {}', "serverless.yml": "provider: aws"},
+        artifacts={
+            "main.tf": 'provider "aws" {}\nresource "aws_lambda_function" "api" {}',
+            "serverless.yml": "provider: aws",
+        },
     )
     suggestions = {item[0]: item for item in suggest_github_evidence(snapshot)}
     assert suggestions["AWS"][4] == 3

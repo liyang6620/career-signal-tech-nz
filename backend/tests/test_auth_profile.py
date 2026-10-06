@@ -520,7 +520,11 @@ def test_github_refresh_preserves_reviewed_suggestions_and_adds_new_findings(
     assert "AWS" in names
     assert len(refreshed.json()["suggestions"]) >= len(project["suggestions"])
     decisions = [{"suggestion_id": item["id"], "decision": "confirmed"} for item in refreshed.json()["suggestions"]]
-    reviewed_again = client.post(f"/api/v1/evidence/github/{project['id']}/review", headers=headers, json={"decisions": decisions})
+    reviewed_again = client.post(
+        f"/api/v1/evidence/github/{project['id']}/review",
+        headers=headers,
+        json={"decisions": decisions},
+    )
     assert reviewed_again.status_code == 200
 
 
