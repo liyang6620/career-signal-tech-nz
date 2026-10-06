@@ -1531,6 +1531,7 @@ def save_role_analysis_as_job(
     if existing is not None:
         if payload.notes is not None:
             existing.notes = payload.notes
+        db.commit()
         db.refresh(existing)
         return saved_job_response(db, existing)
     job = SavedJob(
@@ -2096,6 +2097,32 @@ def list_github_profile_repositories(url: str, user: Annotated[User, Depends(ver
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
+@app.get("/api/v1/evidence/github/projects", response_model=list[GithubProjectResponse])
+def list_github_projects(
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[GithubProjectResponse]:
+    """Restore saved repositories so review and re-analysis survive navigation or a reload."""
+    projects = list(db.scalars(
+        select(GithubProject)
+        .where(GithubProject.user_id == user.id)
+        .order_by(GithubProject.fetched_at.desc())
+    ))
+    responses: list[GithubProjectResponse] = []
+    for project in projects:
+        suggestions = list(db.scalars(
+            select(GithubSuggestion)
+            .where(GithubSuggestion.project_id == project.id)
+            .order_by(GithubSuggestion.category, GithubSuggestion.canonical_skill)
+        ))
+        responses.append(GithubProjectResponse(
+            id=project.id, canonical_url=project.canonical_url, repository=project.repository,
+            description=project.description, stars=project.stars, language=project.language,
+            topics=json.loads(project.topics), status=project.status, suggestions=suggestions,
+        ))
+    return responses
+
+
 @app.post("/api/v1/evidence/github", response_model=GithubProjectResponse, status_code=status.HTTP_201_CREATED)
 def add_github_project(
     payload: GithubProjectRequest,
@@ -2114,7 +2141,6 @@ def add_github_project(
     )
     if existing:
         project = existing
-        db.query(GithubSuggestion).filter(GithubSuggestion.project_id == project.id).delete()
     else:
         project = GithubProject(user_id=user.id, **{key: value for key, value in {
             "canonical_url": snapshot.canonical_url, "owner": snapshot.owner, "repository": snapshot.repository,
@@ -2123,19 +2149,89 @@ def add_github_project(
         }.items()})
         db.add(project)
         db.flush()
-    for name, category, excerpt, confidence, level in suggest_github_evidence(snapshot):
-        db.add(
-            GithubSuggestion(
+    project.description = snapshot.description
+    project.default_branch = snapshot.default_branch
+    project.stars = snapshot.stars
+    project.language = snapshot.language
+    project.topics = json.dumps(snapshot.topics)
+    project.readme_excerpt = snapshot.readme
+    project.fetched_at = datetime.now(UTC)
+    _merge_github_suggestions(db, project, suggest_github_evidence(snapshot))
+    audit(db, "evidence.github_added", user_id=user.id, metadata={"project_id": str(project.id)})
+    db.commit()
+    db.refresh(project)
+    suggestions = list(db.scalars(select(GithubSuggestion).where(GithubSuggestion.project_id == project.id)))
+    return GithubProjectResponse(
+        id=project.id, canonical_url=project.canonical_url, repository=project.repository,
+        description=project.description, stars=project.stars, language=project.language,
+        topics=json.loads(project.topics), status=project.status, suggestions=suggestions,
+    )
+
+
+def _merge_github_suggestions(
+    db: Session,
+    project: GithubProject,
+    findings: list[tuple[str, str, str, float, int]],
+) -> None:
+    """Refresh evidence without deleting reviewed suggestions or their evidence links."""
+    existing = {
+        item.canonical_skill.casefold(): item
+        for item in db.scalars(select(GithubSuggestion).where(GithubSuggestion.project_id == project.id))
+    }
+    has_new = False
+    for name, category, excerpt, confidence, level in findings:
+        suggestion = existing.get(name.casefold())
+        if suggestion is None:
+            has_new = True
+            db.add(GithubSuggestion(
                 project_id=project.id,
                 canonical_skill=name,
                 category=category,
                 excerpt=excerpt,
                 confidence=confidence,
                 proposed_level=level,
-            )
-        )
-    project.status = "awaiting_review"
-    audit(db, "evidence.github_added", user_id=user.id, metadata={"project_id": str(project.id)})
+            ))
+            continue
+        suggestion.category = category
+        suggestion.excerpt = excerpt
+        suggestion.confidence = confidence
+        suggestion.proposed_level = level
+        if suggestion.review_status == "confirmed":
+            evidence = db.scalar(select(CandidateSkillEvidence).where(
+                CandidateSkillEvidence.github_suggestion_id == suggestion.id,
+            ))
+            if evidence is not None:
+                evidence.evidence_level = level
+                evidence.confidence = confidence
+                evidence.excerpt = excerpt
+    project.status = "awaiting_review" if has_new or any(
+        item.review_status == "pending" for item in existing.values()
+    ) else "reviewed"
+
+
+@app.post("/api/v1/evidence/github/{project_id}/refresh", response_model=GithubProjectResponse)
+def refresh_github_project(
+    project_id: UUID,
+    user: Annotated[User, Depends(verified_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> GithubProjectResponse:
+    project = db.scalar(select(GithubProject).where(GithubProject.id == project_id, GithubProject.user_id == user.id))
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="GitHub project not found")
+    try:
+        snapshot = fetch_snapshot(project.canonical_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    project.description = snapshot.description
+    project.default_branch = snapshot.default_branch
+    project.stars = snapshot.stars
+    project.language = snapshot.language
+    project.topics = json.dumps(snapshot.topics)
+    project.readme_excerpt = snapshot.readme
+    project.fetched_at = datetime.now(UTC)
+    findings = suggest_github_evidence(snapshot)
+    _merge_github_suggestions(db, project, findings)
+    audit(db, "evidence.github_refreshed", user_id=user.id, metadata={"project_id": str(project.id)})
     db.commit()
     db.refresh(project)
     suggestions = list(db.scalars(select(GithubSuggestion).where(GithubSuggestion.project_id == project.id)))
@@ -2177,11 +2273,22 @@ def review_github_project(
         if decisions[suggestion.id] == "confirmed":
             skill_slug = slug_for_name(suggestion.canonical_skill)
             if skill_slug:
-                db.add(CandidateSkillEvidence(
-                    user_id=user.id, github_project_id=project.id, github_suggestion_id=suggestion.id,
-                    skill_slug=skill_slug, evidence_level=suggestion.proposed_level, confidence=suggestion.confidence,
-                    excerpt=suggestion.excerpt, locator=project.canonical_url, source_type="github",
+                evidence = db.scalar(select(CandidateSkillEvidence).where(
+                    CandidateSkillEvidence.github_suggestion_id == suggestion.id,
+                    CandidateSkillEvidence.user_id == user.id,
                 ))
+                if evidence is None:
+                    db.add(CandidateSkillEvidence(
+                        user_id=user.id, github_project_id=project.id, github_suggestion_id=suggestion.id,
+                        skill_slug=skill_slug, evidence_level=suggestion.proposed_level, confidence=suggestion.confidence,
+                        excerpt=suggestion.excerpt, locator=project.canonical_url, source_type="github",
+                    ))
+                else:
+                    evidence.skill_slug = skill_slug
+                    evidence.evidence_level = suggestion.proposed_level
+                    evidence.confidence = suggestion.confidence
+                    evidence.excerpt = suggestion.excerpt
+                    evidence.locator = project.canonical_url
     project.status = "reviewed"
     audit(db, "evidence.github_reviewed", user_id=user.id, metadata={"project_id": str(project.id)})
     db.commit()

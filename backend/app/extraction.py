@@ -9,7 +9,7 @@ from pypdf import PdfReader
 from .scoring import assess_evidence_text
 from .taxonomy import SKILLS
 
-PARSER_VERSION = "local-taxonomy-v3"
+PARSER_VERSION = "local-taxonomy-v4"
 
 SECTION_NAMES = {
     "experience": "Experience",
@@ -98,7 +98,15 @@ def parse_document(path: Path, content_type: str) -> ParsedDocument:
         page_count = len(reader.pages)
     elif content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         document = Document(path)
-        text = "\n".join(paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip())
+        blocks = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
+        # CV templates frequently put technical skills and project details in
+        # tables. Reading only paragraphs silently drops those cells.
+        for table in document.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    blocks.append(" | ".join(cells))
+        text = "\n".join(blocks)
         page_count = None
     else:
         raise ValueError("Unsupported document type")

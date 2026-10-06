@@ -461,6 +461,9 @@ def test_public_github_evidence_is_reviewed_and_included_in_fit(
     project = created.json()
     assert project["status"] == "awaiting_review"
     assert any(item["canonical_skill"] == "FastAPI" for item in project["suggestions"])
+    restored_projects = client.get("/api/v1/evidence/github/projects", headers=headers)
+    assert restored_projects.status_code == 200
+    assert restored_projects.json()[0]["id"] == project["id"]
     reviewed = client.post(
         f"/api/v1/evidence/github/{project['id']}/review",
         headers=headers,
@@ -479,6 +482,45 @@ def test_public_github_evidence_is_reviewed_and_included_in_fit(
     assert any(item["source_count"] == 1 for item in fit.json()["contributions"])
     graph = client.get("/api/v1/evidence/graph?role_family=ai", headers=headers)
     assert any(item["source_type"] == "github" for item in graph.json()["evidence"])
+
+
+def test_github_refresh_preserves_reviewed_suggestions_and_adds_new_findings(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshots = [
+        GithubSnapshot(
+            owner="candidate", repository="refreshable", canonical_url="https://github.com/candidate/refreshable",
+            description="Initial", default_branch="main", stars=1, language="Python", topics=[],
+            readme="Built a FastAPI service.",
+        ),
+        GithubSnapshot(
+            owner="candidate", repository="refreshable", canonical_url="https://github.com/candidate/refreshable",
+            description="Updated", default_branch="main", stars=2, language="Python", topics=["aws"],
+            readme="Built a FastAPI service and deployed with AWS.",
+            files=("main.py", "infra/main.tf"),
+            artifacts={"infra/main.tf": 'provider "aws" {}'},
+        ),
+    ]
+    monkeypatch.setattr("app.main.fetch_snapshot", lambda url: snapshots.pop(0))
+    auth = register(client)
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+    created = client.post("/api/v1/evidence/github", headers=headers, json={"url": snapshots[0].canonical_url})
+    assert created.status_code == 201
+    project = created.json()
+    reviewed = client.post(
+        f"/api/v1/evidence/github/{project['id']}/review", headers=headers,
+        json={"decisions": [{"suggestion_id": item["id"], "decision": "confirmed"} for item in project["suggestions"]]},
+    )
+    assert reviewed.status_code == 200
+    refreshed = client.post(f"/api/v1/evidence/github/{project['id']}/refresh", headers=headers)
+    assert refreshed.status_code == 200
+    assert refreshed.json()["status"] == "awaiting_review"
+    names = {item["canonical_skill"] for item in refreshed.json()["suggestions"]}
+    assert "AWS" in names
+    assert len(refreshed.json()["suggestions"]) >= len(project["suggestions"])
+    decisions = [{"suggestion_id": item["id"], "decision": "confirmed"} for item in refreshed.json()["suggestions"]]
+    reviewed_again = client.post(f"/api/v1/evidence/github/{project['id']}/review", headers=headers, json={"decisions": decisions})
+    assert reviewed_again.status_code == 200
 
 
 def test_role_decoder_and_governed_market_import(client: TestClient) -> None:
@@ -580,6 +622,15 @@ def test_role_analysis_can_be_restored_and_tracked_with_status_history(client: T
     assert saved.json()["skill_count"] >= 5
     assert saved.json()["evidenced_skill_count"] == 0
     assert saved.json()["top_gaps"]
+
+    saved_again = client.post(
+        f"/api/v1/jobs/from-analysis/{analysis_id}",
+        headers=headers,
+        json={"company": "Example Ltd", "location": "Wellington", "notes": "Prepare a SQL example"},
+    )
+    assert saved_again.status_code == 201
+    assert saved_again.json()["id"] == str(job_id)
+    assert saved_again.json()["notes"] == "Prepare a SQL example"
 
     plan = client.post(
         "/api/v1/plan/generate",

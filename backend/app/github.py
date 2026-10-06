@@ -73,13 +73,12 @@ def _repository_structure(owner: str, repository: str, branch: str | None) -> tu
     blobs = [item for item in tree["tree"] if item.get("type") == "blob" and item.get("path")]
     files = tuple(str(item["path"]) for item in blobs[:5000])
     priority_names = {
-        "package.json": 0,
-        "pyproject.toml": 0,
-        "requirements.txt": 0,
-        "dockerfile": 1,
-        "docker-compose.yml": 1,
-        "docker-compose.yaml": 1,
-        "dbt_project.yml": 1,
+        "package.json": 0, "package-lock.json": 0, "yarn.lock": 0, "pnpm-lock.yaml": 0,
+        "pyproject.toml": 0, "requirements.txt": 0, "requirements-dev.txt": 0,
+        "poetry.lock": 0, "pipfile": 0, "pipfile.lock": 0,
+        "dockerfile": 1, "docker-compose.yml": 1, "docker-compose.yaml": 1,
+        "dbt_project.yml": 1, "tsconfig.json": 1, "vite.config.ts": 1, "vite.config.js": 1,
+        "makefile": 2,
     }
     candidates = []
     for item in blobs:
@@ -92,7 +91,7 @@ def _repository_structure(owner: str, repository: str, branch: str | None) -> tu
         if priority is not None and item.get("sha"):
             candidates.append((priority, path.count("/"), path, str(item["sha"])))
     artifacts: dict[str, str] = {}
-    for _, _, path, sha in sorted(candidates)[:5]:
+    for _, _, path, sha in sorted(candidates)[:16]:
         payload = _optional_json(f"https://api.github.com/repos/{owner}/{repository}/git/blobs/{sha}")
         if not isinstance(payload, dict) or payload.get("encoding") != "base64" or not payload.get("content"):
             continue
@@ -180,7 +179,7 @@ def _structure_signals(snapshot: GithubSnapshot) -> dict[str, tuple[int, float, 
     python_manifest = "\n".join(
         value
         for path, value in snapshot.artifacts.items()
-        if path.casefold().endswith(("pyproject.toml", "requirements.txt"))
+        if path.casefold().endswith(("pyproject.toml", "requirements.txt", "requirements-dev.txt", "poetry.lock", "pipfile", "pipfile.lock"))
     )
     if re.search(r'["\']react["\']', package_text, re.I) and any(path.endswith((".jsx", ".tsx")) for path in paths):
         add("react", 3, 0.9, "React dependency is supported by JSX/TSX implementation files")
@@ -188,6 +187,19 @@ def _structure_signals(snapshot: GithubSnapshot) -> dict[str, tuple[int, float, 
         add("typescript", 3, 0.9, "TypeScript dependency is supported by TS/TSX implementation files")
     if re.search(r"\bfastapi\b", python_manifest, re.I) and any(path.endswith(".py") for path in paths):
         add("fastapi", 3, 0.9, "FastAPI dependency is supported by Python implementation files")
+    dependency_rules = {
+        "flask": r"\bflask\b", "django": r"\bdjango\b", "pandas": r"\bpandas\b",
+        "numpy": r"\bnumpy\b", "scikit-learn": r"\b(?:scikit[- ]learn|sklearn)\b",
+        "matplotlib": r"\bmatplotlib\b", "next-js": r"[\"']next(?:\.js)?[\"']",
+        "node-js": r"[\"']node(?:\.js)?[\"']", "tailwind": r"[\"']tailwindcss[\"']",
+    }
+    for slug, pattern in dependency_rules.items():
+        manifest = package_text if slug in {"next-js", "node-js", "tailwind"} else python_manifest
+        if not re.search(pattern, manifest, re.I):
+            continue
+        source_extensions = (".js", ".jsx", ".ts", ".tsx") if slug in {"next-js", "node-js", "tailwind"} else (".py",)
+        if any(path.endswith(source_extensions) for path in paths):
+            add(slug, 3, 0.9, f"{SKILLS[slug][0]} is declared in a dependency manifest and supported by implementation files")
 
     docker_files = [
         path for path in paths if path.rsplit("/", 1)[-1] in {"dockerfile", "docker-compose.yml", "docker-compose.yaml"}
@@ -224,6 +236,20 @@ def _structure_signals(snapshot: GithubSnapshot) -> dict[str, tuple[int, float, 
         r"\bkind:\s*(deployment|service)\b", artifact_text, re.I
     ):
         add("kubernetes", 3, 0.9, "Kubernetes deployment manifests found")
+
+    # Cloud and infrastructure skills are often present only in repository
+    # structure/configuration, not in the README. Keep these signals tied to
+    # concrete files so a generic word in prose cannot create a false positive.
+    aws_files = [
+        path for path in paths
+        if path.endswith((".tf", ".tfvars", "serverless.yml", "serverless.yaml"))
+        or path.rsplit("/", 1)[-1].casefold() in {"template.yaml", "template.yml", "samconfig.toml"}
+    ]
+    if aws_files and re.search(r"\b(aws|amazonaws|serverless|cloudformation|sam)\b", artifact_text + "\n" + "\n".join(paths), re.I):
+        add("aws", 3, 0.88, f"AWS infrastructure configuration found ({', '.join(aws_files[:3])})")
+    terraform_files = [path for path in paths if path.endswith((".tf", ".tfvars"))]
+    if terraform_files:
+        add("terraform", 3, 0.9, f"Terraform configuration found ({', '.join(terraform_files[:3])})")
 
     if test_files and workflow_files:
         for slug in ("python", "javascript", "typescript", "react", "fastapi"):

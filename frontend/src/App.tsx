@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -99,7 +99,7 @@ async function apiPayload(response: Response): Promise<unknown> {
 }
 type SessionUser = { id: string; email: string; display_name: string; is_verified: boolean };
 type EvidenceSuggestion = { id: string; canonical_skill: string; category: string; excerpt: string; locator: string; confidence: number; proposed_level: number; review_status: string };
-type GithubProject = { id: string; repository: string; status: string; suggestions: EvidenceSuggestion[] };
+type GithubProject = { id: string; canonical_url?: string; repository: string; status: string; suggestions: EvidenceSuggestion[] };
 type GithubCandidate = { name: string; url: string; description: string | null; language: string | null; stars: number; updated_at: string | null };
 type FitContribution = { skill_slug: string; skill_name: string; weight: number; required: boolean; evidence_level: number; evidence_confidence: number; source_count: number; source_type_count: number; base_score: number; confidence_adjustment: number; specificity_bonus: number; verification_bonus: number; outcome_bonus: number; corroboration_bonus: number; diversity_bonus: number; score_factors: string[]; normalized_score: number; weighted_score: number; market_frequency: number; market_mention_count: number };
 type RoleFit = { role_family: string; score: number; coverage: number; evidence_depth: number; cap_applied: boolean; contributions: FitContribution[]; benchmark_sources?: { name: string; url: string }[]; benchmark_methodology?: string; market_posting_count?: number };
@@ -206,15 +206,9 @@ function dedupeSkillEvidence(items: SkillEvidence[]): SkillEvidence[] {
 }
 
 function PersonalEvidenceGraph({ evidence }: { evidence: SkillEvidence[] }) {
-  const items = dedupeSkillEvidence(evidence).slice(0, 10);
-  const cx = 260; const cy = 188; const orbit = 132;
   const uniqueEvidence = dedupeSkillEvidence(evidence);
-  const labelSlots = [
-    { x: 385, y: 28, width: 170 }, { x: 385, y: 94, width: 170 }, { x: 385, y: 160, width: 170 }, { x: 385, y: 226, width: 170 }, { x: 385, y: 292, width: 170 },
-    { x: 5, y: 28, width: 170 }, { x: 5, y: 94, width: 170 }, { x: 5, y: 160, width: 170 }, { x: 5, y: 226, width: 170 }, { x: 5, y: 292, width: 170 },
-  ];
-  const shortName = (value: string) => value.length > 18 ? `${value.slice(0, 17)}…` : value;
-  return <div className="personal-graph-layout"><svg className="personal-evidence-graph" viewBox="0 0 580 380" role="img" aria-label="Personal evidence skill network"><circle cx={cx} cy={cy} r={orbit} className="personal-graph-orbit" />{items.map((item, index) => { const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(items.length, 1); const x = cx + Math.cos(angle) * orbit; const y = cy + Math.sin(angle) * orbit; return <line key={`link-${item.skill_slug}`} x1={cx} y1={cy} x2={x} y2={y} className="personal-graph-link" />; })}{items.map((item, index) => { const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(items.length, 1); const x = cx + Math.cos(angle) * orbit; const y = cy + Math.sin(angle) * orbit; const slot = labelSlots[index]; const labelOnRight = slot.x > cx; const lineEnd = labelOnRight ? slot.x : slot.x + slot.width; const radius = 10 + Math.max(0, Math.min(7, item.evidence_level)); return <g key={item.skill_slug}><line x1={x} y1={y} x2={lineEnd} y2={slot.y + 13} className="personal-graph-callout-line" /><circle cx={x} cy={y} r={radius} className="personal-graph-node"><title>{item.skill_name}: {evidenceLabel(item.evidence_level)} evidence</title></circle><text x={x} y={y + 4} className="personal-graph-node-index" textAnchor="middle">{index + 1}</text><rect x={slot.x} y={slot.y} width={slot.width} height="26" rx="4" className="personal-graph-callout-box" /><text x={slot.x + 9} y={slot.y + 17} className="personal-graph-callout-text">{index + 1} {shortName(item.skill_name)}</text><title>{item.skill_name}</title></g>; })}<circle cx={cx} cy={cy} r="48" className="personal-graph-core" /><text x={cx} y={cy - 3} className="personal-graph-core-label" textAnchor="middle">MY EVIDENCE</text><text x={cx} y={cy + 15} className="personal-graph-core-count" textAnchor="middle">{uniqueEvidence.length} skills</text></svg><div className="personal-graph-register"><header><span>Confirmed capabilities</span><strong>{uniqueEvidence.length}</strong></header>{uniqueEvidence.slice(0, 10).map((item, index) => <div key={item.skill_slug}><span><b><em>{index + 1}</em>{item.skill_name}</b><small>{item.category} · {evidenceLabel(item.evidence_level)} · {item.source_type}</small></span><strong>{Math.round(item.confidence * 100)}%</strong></div>)}{uniqueEvidence.length > 10 && <small className="personal-graph-more">+ {uniqueEvidence.length - 10} more capabilities in this view</small>}</div></div>;
+  const chartItems = [...uniqueEvidence].sort((left, right) => right.evidence_level - left.evidence_level || right.confidence - left.confidence).slice(0, 8);
+  return <div className="personal-graph-layout"><div className="personal-evidence-chart" role="img" aria-label="Evidence strength by skill"><header><div><span>Evidence strength by skill</span><strong>Which capabilities are best supported?</strong></div><small>Higher proof level means more demonstrated work</small></header><div className="evidence-chart-scale"><span>Claim</span><span>Used</span><span>Implemented</span><span>Verified</span><span>Professional</span></div>{chartItems.map((item) => <div className="evidence-chart-row" key={item.skill_slug}><div className="evidence-chart-label"><strong>{item.skill_name}</strong><small>{evidenceLabel(item.evidence_level)} · {Math.round(item.confidence * 100)}% confidence</small></div><div className="evidence-chart-track"><i style={{ width: `${Math.max(5, Math.min(100, (item.evidence_level / 5) * 100))}%` }} /><b>{item.evidence_level}/5</b></div></div>)}{uniqueEvidence.length > chartItems.length && <p className="evidence-chart-more">Showing the {chartItems.length} strongest signals. See the full confirmed capability list alongside.</p>}</div><div className="personal-graph-register"><header><span>Confirmed capabilities</span><strong>{uniqueEvidence.length}</strong></header>{uniqueEvidence.slice(0, 10).map((item, index) => <div key={item.skill_slug}><span><b><em>{index + 1}</em>{item.skill_name}</b><small>{item.category} · {evidenceLabel(item.evidence_level)} · {item.source_type}</small></span><strong>{Math.round(item.confidence * 100)}%</strong></div>)}{uniqueEvidence.length > 10 && <small className="personal-graph-more">+ {uniqueEvidence.length - 10} more capabilities in this view</small>}</div></div>;
 }
 
 function PersonalEvidenceAnalytics({ evidence }: { evidence: SkillEvidence[] }) {
@@ -227,7 +221,7 @@ function PersonalEvidenceAnalytics({ evidence }: { evidence: SkillEvidence[] }) 
   const maxMaturity = Math.max(...maturity.map((item) => item.count), 1);
   const formatLabel = (value: string) => value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const sourceLabel = (value: string) => value.toLowerCase() === "github" ? "GitHub" : value.toLowerCase() === "cv" ? "CV / resume" : formatLabel(value);
-  return <section className="personal-analytics" aria-labelledby="personal-analytics-title"><header><div><span>Evidence analysis</span><h2 id="personal-analytics-title">What your evidence says beyond the skill list</h2><p>Counts describe the evidence record; they are not a claim of professional proficiency.</p></div><span className="analytics-total"><strong>{evidence.length}</strong> confirmed skills</span></header><div className="analytics-grid"><article><div className="analytics-card-heading"><span>01</span><h3>Capability domains</h3></div><p>Where your current evidence is concentrated.</p><div className="analytics-bars">{categories.map(([category, item]) => <div className="analytics-bar-row" key={category}><span>{formatLabel(category)}<small>avg level {item.count ? (item.total / item.count).toFixed(1) : "0.0"} / 5</small></span><i><u style={{ width: `${Math.max(5, (item.count / maxCategory) * 100)}%` }} /></i><b>{item.count}</b></div>)}</div></article><article><div className="analytics-card-heading"><span>02</span><h3>Evidence maturity</h3></div><p>How far each capability moves from a claim to proof.</p><div className="analytics-bars maturity-bars">{maturity.map((item) => <div className="analytics-bar-row" key={item.level}><span>{item.level}<small>{evidenceLabel(item.level)}</small></span><i><u style={{ width: `${Math.max(5, (item.count / maxMaturity) * 100)}%` }} /></i><b>{item.count}</b></div>)}</div></article><article><div className="analytics-card-heading"><span>03</span><h3>Source triangulation</h3></div><p>Independent sources make a capability easier to inspect.</p><div className="analytics-source-list">{sources.map((item) => <div key={item.source}><span><b>{sourceLabel(item.source)}</b><small>{item.skills} distinct skills</small></span><strong>{item.count}</strong></div>)}{sources.length === 0 && <span className="analytics-empty">Add a CV or project source to start triangulating evidence.</span>}</div></article></div><footer><ShieldCheck size={15} /><span><strong>Interpretation rule.</strong> Capability strength increases when implementation, validation, outcomes and more than one evidence source support the same skill.</span></footer></section>;
+  return <section className="personal-analytics" aria-labelledby="personal-analytics-title"><header><div><span>Evidence analysis</span><h2 id="personal-analytics-title">What your evidence currently shows</h2><p>Use these three views to decide what is already well supported and where you need stronger proof.</p></div><span className="analytics-total"><strong>{evidence.length}</strong> confirmed skills</span></header><div className="analytics-grid"><article><div className="analytics-card-heading"><span>01</span><h3>Where is your evidence concentrated?</h3></div><p>Skill count by area. A larger bar means more of your current record sits in that area.</p><div className="analytics-bars">{categories.map(([category, item]) => <div className="analytics-bar-row" key={category}><span>{formatLabel(category)}<small>average proof {item.count ? (item.total / item.count).toFixed(1) : "0.0"} / 5</small></span><i><u style={{ width: `${Math.max(5, (item.count / maxCategory) * 100)}%` }} /></i><b>{item.count} skills</b></div>)}</div></article><article><div className="analytics-card-heading"><span>02</span><h3>How much proof do you have?</h3></div><p>Each level shows how many skills have moved from a claim to demonstrated work.</p><div className="analytics-bars maturity-bars">{maturity.map((item) => <div className="analytics-bar-row" key={item.level}><span>{item.level}<small>{evidenceLabel(item.level)}</small></span><i><u style={{ width: `${Math.max(5, (item.count / maxMaturity) * 100)}%` }} /></i><b>{item.count} skills</b></div>)}</div></article><article><div className="analytics-card-heading"><span>03</span><h3>Where can your skills be verified?</h3></div><p>More than one source makes a skill easier for someone else to inspect.</p><div className="analytics-source-list">{sources.map((item) => <div key={item.source}><span><b>{sourceLabel(item.source)}</b><small>{item.count} evidence records</small></span><strong>{item.skills} skills</strong></div>)}{sources.length === 0 && <span className="analytics-empty">Add a CV or project source to make your evidence easier to verify.</span>}</div></article></div><footer><ShieldCheck size={15} /><span><strong>How to read this.</strong> A skill becomes more credible when the record shows implemented work, validation or outcomes, and is supported by more than one source.</span></footer></section>;
 }
 
 function PersonalEvidenceVisuals({ evidence }: { evidence: SkillEvidence[] }) {
@@ -430,8 +424,11 @@ function SavedJobDecisionFactors({ jobs }: { jobs: SavedJob[] }) {
 function JobsView({ jobs, loading, history, historyJobId, historyLoading, comparisonJobIds, comparisonDetails, comparisonDetailsLoading, comparisonDetailsError, onToggleCompare, onClearCompare, onHistory, onStatus, onNotes, onDelete, onReview, onOpenAnalysis, navigate }: { jobs: SavedJob[]; loading: boolean; history: JobStatusEvent[]; historyJobId: string | null; historyLoading: boolean; comparisonJobIds: string[]; comparisonDetails: AnalysisDetailsMap; comparisonDetailsLoading: boolean; comparisonDetailsError: boolean; onToggleCompare: (job: SavedJob) => void; onClearCompare: () => void; onHistory: (job: SavedJob) => void; onStatus: (job: SavedJob, status: SavedJob["status"]) => void; onNotes: (job: SavedJob, notes: string) => void; onDelete: (job: SavedJob) => void; onReview: (job: SavedJob) => void; onOpenAnalysis: (job: SavedJob) => void; navigate: (path: string) => void }) {
   const active = jobs.filter((job) => !["rejected", "archived"].includes(job.status));
   const [compareMode, setCompareMode] = useState(comparisonJobIds.length > 0);
+  const [notesJob, setNotesJob] = useState<SavedJob | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
   const comparisonJobs = jobs.filter((job) => comparisonJobIds.includes(job.id));
-  return <div className="tool-page jobs-page">
+  return <>
+  <div className="tool-page jobs-page">
     <header className="jobs-header"><div><p className="page-kicker-icon"><ClipboardList size={15} />Application tracker</p><h1>Your role decisions, in one place</h1><span>Keep saved opportunities, preparation and application outcomes connected to the same evidence profile.</span></div><div className="jobs-header-actions"><button className="secondary-button" onClick={() => { setCompareMode((current) => !current); if (compareMode) onClearCompare(); }}><Layers3 size={15} />{compareMode ? "Done selecting" : "Compare saved roles"}</button><button className="primary-button" onClick={() => navigate(productRoutes.decoder)}><BriefcaseBusiness size={15} />Compare another role</button></div></header>
     <section className="jobs-summary" aria-label="Application pipeline summary">
       <div><span>Active opportunities</span><strong>{active.length}</strong><small>excluding closed and archived roles</small></div>
@@ -445,15 +442,17 @@ function JobsView({ jobs, loading, history, historyJobId, historyLoading, compar
       {loading ? <div className="jobs-empty"><RefreshCw size={22} className="spin" /><h3>Loading your applications</h3></div> : jobs.length ? <div className="jobs-table" role="table" aria-label="Saved job applications">
          <div className="jobs-table-head" role="row"><span>Opportunity</span><span>Evidence readiness</span><span>Stage</span><span>Actions</span></div>
         {jobs.map((job) => <article className="jobs-row" role="row" key={job.id}>
-          <div>{compareMode && <label className="job-compare-toggle"><input type="checkbox" checked={comparisonJobIds.includes(job.id)} onChange={() => onToggleCompare(job)} disabled={!comparisonJobIds.includes(job.id) && comparisonJobIds.length >= 3} /><span>Compare</span></label>}<a href={job.analysis_id ? productRoutes.decoder : job.source_url} target={job.analysis_id ? undefined : "_blank"} rel={job.analysis_id ? undefined : "noreferrer"} onClick={job.analysis_id ? (event) => { event.preventDefault(); onOpenAnalysis(job); } : undefined}>{job.title}</a><span>{job.company} · {job.analysis_id ? "Saved analysis" : job.location}</span><small>{job.analysis_id ? job.location : ""}</small></div>
+          <div>{compareMode && <label className="job-compare-toggle"><input type="checkbox" checked={comparisonJobIds.includes(job.id)} onChange={() => onToggleCompare(job)} disabled={!comparisonJobIds.includes(job.id) && comparisonJobIds.length >= 3} /><span>Compare</span></label>}<a href={job.analysis_id ? productRoutes.decoder : job.source_url} target={job.analysis_id ? undefined : "_blank"} rel={job.analysis_id ? undefined : "noreferrer"} onClick={job.analysis_id ? (event) => { event.preventDefault(); onOpenAnalysis(job); } : undefined}>{job.title}</a><span>{job.company} · {job.analysis_id ? "Saved analysis" : job.location}</span><small>{job.analysis_id ? job.location : ""}</small>{job.notes && <small className="job-note-preview"><FileText size={12} />{job.notes}</small>}</div>
           <div className="job-readiness">{job.skill_count > 0 ? <><strong>{job.evidenced_skill_count} / {job.skill_count}</strong><span>capabilities evidenced</span>{job.top_gaps.length > 0 && <small>Next: {job.top_gaps.slice(0, 2).join(", ")}</small>}</> : <><strong>Review needed</strong><span>Compare the full advertisement</span></>}</div>
           <label><span className="sr-only">Application status for {job.title}</span><select value={job.status} onChange={(event) => onStatus(job, event.target.value as SavedJob["status"])}>{applicationStages.map((stage) => <option key={stage} value={stage}>{applicationStageLabels[stage]}</option>)}</select></label>
-          <div className="job-row-actions"><button type="button" className="secondary-button job-plan-button" onClick={() => onReview(job)}><FileCheck2 size={13} />{job.analysis_id ? "Review fit" : "Compare first"}</button><button type="button" className="text-button" onClick={() => onHistory(job)} aria-expanded={historyJobId === job.id}><History size={13} />{historyJobId === job.id ? "Hide" : "History"}</button><button type="button" className="text-button" onClick={() => { const notes = window.prompt("Notes for this opportunity", job.notes ?? ""); if (notes !== null) onNotes(job, notes); }}>Notes</button><button type="button" className="text-button danger-button" onClick={() => onDelete(job)}>Remove</button></div>
+          <div className="job-row-actions"><button type="button" className="secondary-button job-plan-button" onClick={() => onReview(job)}><FileCheck2 size={13} />{job.analysis_id ? "Review fit" : "Compare first"}</button><button type="button" className="text-button" onClick={() => onHistory(job)} aria-expanded={historyJobId === job.id}><History size={13} />{historyJobId === job.id ? "Hide" : "History"}</button><button type="button" className="text-button" onClick={() => { setNotesJob(job); setNotesDraft(job.notes ?? ""); }}>Notes</button><button type="button" className="text-button danger-button" onClick={() => onDelete(job)}>Remove</button></div>
           {historyJobId === job.id && <div className="job-history-panel" aria-live="polite">{historyLoading ? <span><RefreshCw size={14} className="spin" />Loading stage history</span> : history.length ? <ol>{history.map((event) => <li key={event.id}><span>{event.from_status ? `${applicationStageLabels[event.from_status]} → ` : "Created as "}{applicationStageLabels[event.to_status]}</span><time dateTime={event.changed_at}>{new Date(event.changed_at).toLocaleString("en-NZ")}</time></li>)}</ol> : <span>No status changes recorded yet.</span>}</div>}
         </article>)}
       </div> : <div className="jobs-empty"><Bookmark size={25} /><h3>No saved opportunities yet</h3><p>Search employer evidence and save a real vacancy, or compare a job advertisement before adding it to your pipeline.</p><div><button className="primary-button" onClick={() => navigate(productRoutes.evidence)}>Search employer evidence</button><button className="secondary-button" onClick={() => navigate(productRoutes.decoder)}>Compare an advertisement</button></div></div>}
     </section>
-  </div>;
+  </div>
+  {notesJob && <div className="app-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNotesJob(null); }}><section className="app-modal notes-modal" role="dialog" aria-modal="true" aria-labelledby="notes-modal-title"><header><div><span className="panel-kicker">Application notes</span><h2 id="notes-modal-title">{notesJob.title}</h2><p>Add a private reminder for this opportunity.</p></div><button type="button" className="icon-button" aria-label="Close notes" onClick={() => setNotesJob(null)}><X size={17} /></button></header><label className="field"><span>Notes</span><textarea autoFocus rows={6} value={notesDraft} onChange={(event) => setNotesDraft(event.target.value)} placeholder="What do you want to remember before the next step?" /></label><footer><button type="button" className="secondary-button" onClick={() => setNotesJob(null)}>Cancel</button><button type="button" className="primary-button" onClick={() => { onNotes(notesJob, notesDraft); setNotesJob(null); }}>Save notes <Check size={15} /></button></footer></section></div>}
+  </>;
 }
 
 function AccountSettingsView({ user, onExport, onDelete }: { user: SessionUser; onExport: () => Promise<void>; onDelete: (password: string) => Promise<void> }) {
@@ -645,6 +644,7 @@ export default function App() {
   const [savedGithubUrls, setSavedGithubUrls] = useState<Set<string>>(new Set());
   const [githubProjects, setGithubProjects] = useState<GithubProject[]>([]);
   const [githubCandidates, setGithubCandidates] = useState<GithubCandidate[]>([]);
+  const [githubProfileLookupDone, setGithubProfileLookupDone] = useState(false);
   const [selectedGithubUrls, setSelectedGithubUrls] = useState<Set<string>>(new Set());
   const [confirmedGithub, setConfirmedGithub] = useState<Set<string>>(new Set());
   const [portfolio, setPortfolio] = useState("");
@@ -687,6 +687,19 @@ export default function App() {
   const [analysisHistory, setAnalysisHistory] = useState<JobAnalysisSummary[]>([]);
   const [profileEvidenceFilter, setProfileEvidenceFilter] = useState<EvidenceRoleFilter>("all");
 
+  const authenticatedFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init);
+    if (response.status === 401 && token) {
+      const returnTo = `${routerLocation.pathname}${routerLocation.search}`;
+      setToken(null);
+      setUser(null);
+      setSaved(false);
+      setEditingProfile(true);
+      navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
+    }
+    return response;
+  }, [navigate, routerLocation.pathname, routerLocation.search, token]);
+
   useEffect(() => {
     const search = new URLSearchParams(routerLocation.search);
     const legacyVerify = search.get("verify");
@@ -713,9 +726,10 @@ export default function App() {
     let active = true;
     const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch(`${API_URL}/api/v1/profile`, { headers }),
-      fetch(`${API_URL}/api/v1/evidence/uploads`, { headers }),
-    ]).then(async ([profileResponse, uploadsResponse]) => {
+      authenticatedFetch(`${API_URL}/api/v1/profile`, { headers }),
+      authenticatedFetch(`${API_URL}/api/v1/evidence/uploads`, { headers }),
+      authenticatedFetch(`${API_URL}/api/v1/evidence/github/projects`, { headers }),
+    ]).then(async ([profileResponse, uploadsResponse, githubProjectsResponse]) => {
       if (!active) return;
       if (uploadsResponse.ok) {
         const uploads: UploadRecord[] = await uploadsResponse.json();
@@ -729,6 +743,13 @@ export default function App() {
           setCvLabel(current.cv_label ?? "");
           setCvTargetRole((current.target_role as RoleKey) || "");
         }
+      }
+      if (githubProjectsResponse.ok) {
+        const projects: GithubProject[] = await githubProjectsResponse.json();
+        setGithubProjects(projects);
+        setConfirmedGithub(new Set(projects.flatMap((project) => project.suggestions
+          .filter((item) => item.review_status !== "rejected")
+          .map((item) => item.id))));
       }
       if (!profileResponse.ok) {
         setEditingProfile(true);
@@ -750,38 +771,38 @@ export default function App() {
       if (active) setError("Your saved profile could not be loaded.");
     }).finally(() => { if (active) setLoadingProfile(false); });
     return () => { active = false; };
-  }, [token, user?.is_verified]);
+  }, [authenticatedFetch, token, user?.is_verified]);
 
   useEffect(() => {
     if (!token || !cvUploadId || !["queued_for_scan", "scanning", "queued_for_parsing", "parsing"].includes(cvStatus)) return;
     const timer = window.setInterval(async () => {
-      const response = await fetch(`${API_URL}/api/v1/evidence/uploads`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await authenticatedFetch(`${API_URL}/api/v1/evidence/uploads`, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) return;
       const uploads = await response.json();
       const current = uploads.find((upload: { id: string }) => upload.id === cvUploadId);
        if (current) { setCvStatus(current.status); setCvFailureReason(current.failure_reason ?? null); }
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [token, cvUploadId, cvStatus]);
+  }, [authenticatedFetch, token, cvUploadId, cvStatus]);
 
   useEffect(() => {
     if (!token || !cvUploadId || cvStatus !== "awaiting_review") return;
-    fetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}/extraction`, { headers: { Authorization: `Bearer ${token}` } })
+    authenticatedFetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}/extraction`, { headers: { Authorization: `Bearer ${token}` } })
       .then(async (response) => response.ok ? response.json() : Promise.reject())
       .then((data) => {
         setSuggestions(data.suggestions);
         setConfirmedSuggestions(new Set(data.suggestions.map((item: EvidenceSuggestion) => item.id)));
       })
       .catch(() => setError("The CV was parsed, but its evidence could not be loaded."));
-  }, [token, cvUploadId, cvStatus]);
+  }, [authenticatedFetch, token, cvUploadId, cvStatus]);
 
   useEffect(() => {
     if (!token || !view || !["market", "path"].includes(view)) return;
     let active = true;
     const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch(`${API_URL}/api/v1/market/summary`, { headers }),
-      fetch(`${API_URL}/api/v1/market/quality`, { headers }),
+      authenticatedFetch(`${API_URL}/api/v1/market/summary`, { headers }),
+      authenticatedFetch(`${API_URL}/api/v1/market/quality`, { headers }),
     ]).then(async ([summaryResponse, qualityResponse]) => {
       if (!active) return;
       if (summaryResponse.ok) setMarket(await summaryResponse.json());
@@ -790,7 +811,7 @@ export default function App() {
       if (active) setError("Market data could not be loaded.");
     });
     return () => { active = false; };
-  }, [token, view]);
+  }, [authenticatedFetch, token, view]);
 
   useEffect(() => {
     if (!token || !view || !["workspace", "jobs", "decoder"].includes(view)) return;
@@ -800,8 +821,8 @@ export default function App() {
     setLoadingJobs(true);
     const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch(`${API_URL}/api/v1/jobs`, { headers }),
-      fetch(`${API_URL}/api/v1/role-decoder/history`, { headers }),
+      authenticatedFetch(`${API_URL}/api/v1/jobs`, { headers }),
+      authenticatedFetch(`${API_URL}/api/v1/role-decoder/history`, { headers }),
     ]).then(async ([jobsResponse, historyResponse]) => {
       if (!active) return;
       if (jobsResponse.ok) setSavedJobs(await jobsResponse.json());
@@ -812,7 +833,7 @@ export default function App() {
       if (active) setLoadingJobs(false);
     });
     return () => { active = false; };
-  }, [token, view]);
+  }, [authenticatedFetch, token, view]);
 
   useEffect(() => {
     if (!token || view !== "jobs" || comparisonJobIds.length < 2) {
@@ -836,12 +857,12 @@ export default function App() {
       const results = await Promise.allSettled(selectedJobs.map(async (job) => {
         let current = job;
         if (!current.analysis_id) {
-          const ensureResponse = await fetch(`${API_URL}/api/v1/jobs/${job.id}/analysis`, { method: "POST", headers });
+          const ensureResponse = await authenticatedFetch(`${API_URL}/api/v1/jobs/${job.id}/analysis`, { method: "POST", headers });
           const ensured = await apiPayload(ensureResponse) as SavedJob | { detail?: unknown } | null;
           if (!ensureResponse.ok || !ensured || !("id" in ensured)) throw new Error(apiError(ensured, "Saved job could not be prepared for comparison"));
           current = ensured as SavedJob;
         }
-        const response = await fetch(`${API_URL}/api/v1/role-decoder/history/${current.analysis_id}`, { headers });
+        const response = await authenticatedFetch(`${API_URL}/api/v1/role-decoder/history/${current.analysis_id}`, { headers });
         if (!response.ok) throw new Error(`Saved analysis request failed: ${response.status}`);
         const payload = await response.json() as { result?: DecodedRole };
         if (!payload.result) throw new Error("Saved analysis result missing");
@@ -877,7 +898,7 @@ export default function App() {
       if (active) setComparisonDetailsLoading(false);
     });
     return () => { active = false; };
-  }, [comparisonJobIds, savedJobs, token, view]);
+  }, [authenticatedFetch, comparisonJobIds, savedJobs, token, view]);
 
   useEffect(() => {
     if (!token || !["graph", "path"].includes(view ?? "") || !role) return;
@@ -888,7 +909,7 @@ export default function App() {
     setRoleFitsLoading(true);
     setRoleFitsError(false);
     Promise.allSettled(roleKeys.map(async (roleKey) => {
-      const response = await fetch(`${API_URL}/api/v1/evidence/fit?role_family=${encodeURIComponent(roleKey)}`, { headers });
+      const response = await authenticatedFetch(`${API_URL}/api/v1/evidence/fit?role_family=${encodeURIComponent(roleKey)}`, { headers });
       if (!response.ok) throw new Error(`Role fit request failed: ${response.status}`);
       return [roleKey, await response.json() as RoleFit] as const;
     })).then((results) => {
@@ -901,13 +922,13 @@ export default function App() {
     }).catch(() => { if (active) setRoleFitsError(true); })
       .finally(() => { if (active) setRoleFitsLoading(false); });
     return () => { active = false; };
-  }, [role, roleFitsRefresh, token, view]);
+  }, [authenticatedFetch, role, roleFitsRefresh, token, view]);
 
   useEffect(() => {
     if (!token || !["graph", "workspace"].includes(view ?? "")) return;
     let active = true;
     const graphRole = role || "software";
-    fetch(`${API_URL}/api/v1/evidence/graph?role_family=${encodeURIComponent(graphRole)}`, { headers: { Authorization: `Bearer ${token}` } })
+    authenticatedFetch(`${API_URL}/api/v1/evidence/graph?role_family=${encodeURIComponent(graphRole)}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(async (response) => {
         if (!response.ok) throw new Error();
         return response.json() as Promise<{ evidence: SkillEvidence[] }>;
@@ -915,7 +936,7 @@ export default function App() {
       .then((data) => { if (active) setPersonalEvidence(dedupeSkillEvidence(data.evidence ?? [])); })
       .catch(() => { if (active) setError("Your capability evidence could not be loaded."); });
     return () => { active = false; };
-  }, [role, token, view]);
+  }, [authenticatedFetch, role, token, view]);
 
   async function uploadCv(file: File) {
     if (!token) return;
@@ -925,14 +946,14 @@ export default function App() {
     setCvStatus("uploading");
     const contentType = file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     try {
-      const initiated = await fetch(`${API_URL}/api/v1/evidence/uploads`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ filename: file.name, content_type: contentType, size: file.size, cv_label: cvLabel.trim() || null, target_role: cvTargetRole || role || null }) });
+      const initiated = await authenticatedFetch(`${API_URL}/api/v1/evidence/uploads`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ filename: file.name, content_type: contentType, size: file.size, cv_label: cvLabel.trim() || null, target_role: cvTargetRole || role || null }) });
       const upload = await initiated.json();
       if (!initiated.ok) throw new Error(apiError(upload, "Could not prepare upload"));
       setCvUploadId(upload.id);
       setCvFailureReason(null);
       const stored = await fetch(upload.upload_url, { method: "PUT", headers: { "Content-Type": contentType, "x-amz-meta-expected-size": String(file.size) }, body: file });
       if (!stored.ok) throw new Error("Object storage rejected the upload");
-      const completed = await fetch(`${API_URL}/api/v1/evidence/uploads/${upload.id}/complete`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const completed = await authenticatedFetch(`${API_URL}/api/v1/evidence/uploads/${upload.id}/complete`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
       const result = await completed.json();
       if (!completed.ok) throw new Error(apiError(result, "Could not complete upload"));
       setCvStatus(result.status);
@@ -945,7 +966,7 @@ export default function App() {
   }
 
   async function removeCv() {
-    if (token && cvUploadId) await fetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    if (token && cvUploadId) await authenticatedFetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
     setCv(null);
     setCvFilename("");
     setCvUploadId(null);
@@ -959,7 +980,7 @@ export default function App() {
 
   async function retryCv() {
     if (!token || !cvUploadId) return;
-    const response = await fetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}/retry`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    const response = await authenticatedFetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}/retry`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
     const result = await apiPayload(response) as UploadRecord | { detail?: unknown } | null;
     if (!response.ok) { setError(apiError(result, "This CV could not be retried")); return; }
     const upload = result as UploadRecord;
@@ -974,7 +995,7 @@ export default function App() {
     setSavingProfile(true);
     try {
       if (cvUploadId && cvStatus === "awaiting_review") {
-        const review = await fetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}/review`, {
+        const review = await authenticatedFetch(`${API_URL}/api/v1/evidence/uploads/${cvUploadId}/review`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ decisions: suggestions.map((item) => ({ suggestion_id: item.id, decision: confirmedSuggestions.has(item.id) ? "confirmed" : "rejected" })) }),
@@ -984,7 +1005,7 @@ export default function App() {
         setCvStatus((reviewed as UploadRecord).status);
       }
       for (const githubProject of githubProjects.filter((item) => item.status === "awaiting_review")) {
-        const review = await fetch(`${API_URL}/api/v1/evidence/github/${githubProject.id}/review`, {
+        const review = await authenticatedFetch(`${API_URL}/api/v1/evidence/github/${githubProject.id}/review`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ decisions: githubProject.suggestions.map((item) => ({ suggestion_id: item.id, decision: confirmedGithub.has(item.id) ? "confirmed" : "rejected" })) }),
@@ -999,7 +1020,7 @@ export default function App() {
         ...githubUrls.map((url) => ({ source_type: "github", source_reference: url.startsWith("http") ? url : `https://${url}` })),
         ...(portfolio.trim() ? [{ source_type: "portfolio", source_reference: portfolio.startsWith("http") ? portfolio : `https://${portfolio}` }] : []),
       ];
-      const response = await fetch(`${API_URL}/api/v1/profile`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ role_family: role, location, seniority, evidence_sources }) });
+      const response = await authenticatedFetch(`${API_URL}/api/v1/profile`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ role_family: role, location, seniority, evidence_sources }) });
       const data = await apiPayload(response) as ProfileData | { detail?: unknown } | null;
       if (!response.ok) throw new Error(apiError(data, `Profile could not be saved (${response.status})`));
       const savedProfile = data as ProfileData;
@@ -1011,6 +1032,31 @@ export default function App() {
       setError(caught instanceof Error ? caught.message : "The evidence profile could not be created. Please try again.");
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  async function refreshGithubProject(project: GithubProject) {
+    if (!token) return;
+    setError("");
+    try {
+      const response = await fetch(`${API_URL}/api/v1/evidence/github/${project.id}/refresh`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const refreshed = await apiPayload(response) as GithubProject | { detail?: unknown } | null;
+      if (!response.ok) throw new Error(apiError(refreshed, "Could not re-analyse this repository"));
+      const nextProject = refreshed as GithubProject;
+      setGithubProjects((current) => current.map((item) => item.id === nextProject.id ? nextProject : item));
+      setConfirmedGithub((current) => {
+        const next = new Set<string>();
+        for (const item of nextProject.suggestions) {
+          if (item.review_status === "confirmed" || item.review_status === "pending" && (current.has(item.id) || !current.size)) next.add(item.id);
+        }
+        return next;
+      });
+      setError(nextProject.status === "awaiting_review" ? "Repository re-analysed. Review the new or updated GitHub evidence before saving." : "Repository is up to date.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not re-analyse this repository");
     }
   }
 
@@ -1032,12 +1078,12 @@ export default function App() {
     setError("");
     setDecodingJob(true);
     try {
-      const response = await fetch(`${API_URL}/api/v1/role-decoder`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ title: decoderTitle, description: decoderDescription }) });
+      const response = await authenticatedFetch(`${API_URL}/api/v1/role-decoder`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ title: decoderTitle, description: decoderDescription }) });
       const result = await response.json();
       if (!response.ok) { setError(apiError(result, "Could not decode this role")); return; }
       setDecodedRole(result);
       setDecoderFocus(result.scope_status === "mixed" ? result.role_family : "all");
-      const historyResponse = await fetch(`${API_URL}/api/v1/role-decoder/history`, { headers: { Authorization: `Bearer ${token}` } });
+      const historyResponse = await authenticatedFetch(`${API_URL}/api/v1/role-decoder/history`, { headers: { Authorization: `Bearer ${token}` } });
       if (historyResponse.ok) setAnalysisHistory(await historyResponse.json());
     } catch {
       setError("The role could not be analysed. Check your connection and try again.");
@@ -1050,7 +1096,7 @@ export default function App() {
     if (!token) return;
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/v1/role-decoder/history/${analysisId}`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await authenticatedFetch(`${API_URL}/api/v1/role-decoder/history/${analysisId}`, { headers: { Authorization: `Bearer ${token}` } });
       const result = await apiPayload(response) as { title?: string; description?: string; result?: DecodedRole; detail?: unknown } | null;
       if (!response.ok || !result?.result) throw new Error(apiError(result, "The saved analysis could not be restored"));
       setDecoderTitle(result.title ?? "");
@@ -1071,7 +1117,7 @@ export default function App() {
     setSearchingEvidence(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/v1/rag/search`, {
+      const response = await authenticatedFetch(`${API_URL}/api/v1/rag/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ query: evidenceQuery, role_family: null, location: null, market_window_days: 180, limit: 8 }),
@@ -1080,7 +1126,7 @@ export default function App() {
       if (!response.ok) throw new Error(apiError(result, "Could not search market evidence"));
       setEvidenceResults(result.citations);
       setAiExplanation(null);
-      const quality = await fetch(`${API_URL}/api/v1/rag/judgements/quality`, { headers: { Authorization: `Bearer ${token}` } });
+      const quality = await authenticatedFetch(`${API_URL}/api/v1/rag/judgements/quality`, { headers: { Authorization: `Bearer ${token}` } });
       if (quality.ok) setRetrievalQuality(await quality.json());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not search market evidence");
@@ -1094,7 +1140,7 @@ export default function App() {
     setExplainingEvidence(true);
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/v1/rag/explain`, {
+      const response = await authenticatedFetch(`${API_URL}/api/v1/rag/explain`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ query: evidenceQuery, role_family: null, location: null, market_window_days: 180, limit: 8 }),
@@ -1110,7 +1156,7 @@ export default function App() {
   }
 
   async function judgeEvidence(item: EvidenceResult, relevant: boolean, rank: number) {
-    const response = await fetch(`${API_URL}/api/v1/rag/judgements`, {
+    const response = await authenticatedFetch(`${API_URL}/api/v1/rag/judgements`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ citation_id: item.citation_id, query: evidenceQuery, role_family: role || null, location, result_rank: rank, relevant }),
@@ -1122,7 +1168,7 @@ export default function App() {
     if (!token) return;
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/v1/jobs`, {
+      const response = await authenticatedFetch(`${API_URL}/api/v1/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -1147,7 +1193,7 @@ export default function App() {
     if (!token || !decodedRole?.analysis_id) return;
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/v1/jobs/from-analysis/${decodedRole.analysis_id}`, {
+      const response = await authenticatedFetch(`${API_URL}/api/v1/jobs/from-analysis/${decodedRole.analysis_id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ location, company: "Employer not specified" }),
@@ -1166,7 +1212,7 @@ export default function App() {
     const previous = job.status;
     setSavedJobs((current) => current.map((item) => item.id === job.id ? { ...item, status: nextStatus } : item));
     try {
-      const response = await fetch(`${API_URL}/api/v1/jobs/${job.id}`, {
+      const response = await authenticatedFetch(`${API_URL}/api/v1/jobs/${job.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: nextStatus }),
@@ -1183,7 +1229,7 @@ export default function App() {
 
   async function updateJobNotes(job: SavedJob, notes: string) {
     if (!token) return;
-    const response = await fetch(`${API_URL}/api/v1/jobs/${job.id}`, {
+    const response = await authenticatedFetch(`${API_URL}/api/v1/jobs/${job.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ notes }),
@@ -1235,7 +1281,7 @@ export default function App() {
     setJobHistory([]);
     setLoadingJobHistory(true);
     try {
-      const response = await fetch(`${API_URL}/api/v1/jobs/${job.id}/history`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await authenticatedFetch(`${API_URL}/api/v1/jobs/${job.id}/history`, { headers: { Authorization: `Bearer ${token}` } });
       const result = await apiPayload(response) as JobStatusEvent[] | { detail?: unknown } | null;
       if (!response.ok) throw new Error(apiError(result, "Application history could not be loaded"));
       setJobHistory(result as JobStatusEvent[]);
@@ -1248,7 +1294,7 @@ export default function App() {
 
   async function deleteJob(job: SavedJob) {
     if (!token || !window.confirm(`Remove ${job.title} from your application tracker?`)) return;
-    const response = await fetch(`${API_URL}/api/v1/jobs/${job.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    const response = await authenticatedFetch(`${API_URL}/api/v1/jobs/${job.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
     if (!response.ok) {
       const result = await apiPayload(response);
       setError(apiError(result, "The opportunity could not be removed"));
@@ -1260,7 +1306,7 @@ export default function App() {
 
   async function exportAccountData() {
     if (!token) return;
-    const response = await fetch(`${API_URL}/api/v1/account/export`, { headers: { Authorization: `Bearer ${token}` } });
+    const response = await authenticatedFetch(`${API_URL}/api/v1/account/export`, { headers: { Authorization: `Bearer ${token}` } });
     const result = await apiPayload(response);
     if (!response.ok) {
       setError(apiError(result, "Your account export could not be created"));
@@ -1277,7 +1323,7 @@ export default function App() {
 
   async function deleteAccount(password: string) {
     if (!token) return;
-    const response = await fetch(`${API_URL}/api/v1/account`, {
+    const response = await authenticatedFetch(`${API_URL}/api/v1/account`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ password }),
@@ -1338,11 +1384,21 @@ export default function App() {
     }
     const enteredGithubUrls = github.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
     const hasOnlySavedGithub = enteredGithubUrls.length > 0 && enteredGithubUrls.every((url) => savedGithubUrls.has(normalizeSourceUrl(url)));
-    if (/^https?:\/\/github\.com\/[^/]+\/?$/.test(github.trim()) && githubCandidates.length === 0 && !savedGithubUrls.has(normalizeSourceUrl(github))) {
-      const response = await fetch(`${API_URL}/api/v1/evidence/github/profile?url=${encodeURIComponent(github.trim())}`, { headers: { Authorization: `Bearer ${token}` } });
+    const isGithubProfileUrl = /^https?:\/\/github\.com\/[^/]+\/?$/.test(github.trim());
+    if (isGithubProfileUrl && githubCandidates.length === 0 && !savedGithubUrls.has(normalizeSourceUrl(github))) {
+      if (githubProfileLookupDone) {
+        setError("This GitHub profile has no public repositories selected. Add a repository URL or choose another profile.");
+        return;
+      }
+      const response = await authenticatedFetch(`${API_URL}/api/v1/evidence/github/profile?url=${encodeURIComponent(github.trim())}`, { headers: { Authorization: `Bearer ${token}` } });
       const candidates = await response.json();
       if (!response.ok) { setError(apiError(candidates, "Could not load GitHub repositories")); return; }
       setGithubCandidates(candidates);
+      setGithubProfileLookupDone(true);
+      if (!candidates.length) {
+        setError("This GitHub profile has no public repositories. Add a repository URL or choose another profile.");
+        return;
+      }
       setSelectedGithubUrls(new Set(candidates.slice(0, 6).map((item: GithubCandidate) => item.url)));
       setError("Select the public repositories you want to use, then click Review evidence again.");
       return;
@@ -1357,7 +1413,7 @@ export default function App() {
       const urls = githubValue.split(/[\n,]+/).map((item) => item.trim()).filter((item) => item && !savedGithubUrls.has(normalizeSourceUrl(item)));
       const projects: GithubProject[] = [];
       for (const rawUrl of urls) {
-        const response = await fetch(`${API_URL}/api/v1/evidence/github`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ url: rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}` }) });
+        const response = await authenticatedFetch(`${API_URL}/api/v1/evidence/github`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ url: rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}` }) });
         const project = await response.json();
         if (!response.ok) { setError(apiError(project, `Could not inspect ${rawUrl}`)); return; }
         projects.push(project);
@@ -1488,8 +1544,9 @@ export default function App() {
                  <div className={`source-row ${cvUploadId ? "added" : ""}`}><span className="source-icon"><FileText size={19} /></span><div><strong>CV or resume</strong><p>{cvUploadId ? `${cvFilename || cv?.name || "Saved CV"} · ${cvStatus.replaceAll("_", " ")}` : "PDF or DOCX, up to 10 MB"}</p>{cvFailureReason && <small className="source-error">{cvFailureReason}</small>}</div>{cvUploadId ? <span className="source-actions">{["scan_failed", "parse_failed"].includes(cvStatus) && <button className="text-button" type="button" onClick={retryCv}><RefreshCw size={14} />Retry</button>}<button className="icon-action" aria-label="Remove CV" onClick={removeCv}><X size={17} /></button></span> : <label className="upload-button"><UploadCloud size={15} />Choose file<input type="file" accept=".pdf,.docx" onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadCv(file); }} /></label>}</div>
                  <div className="cv-version-fields"><label className="field"><span>CV label</span><input value={cvLabel} onChange={(event) => setCvLabel(event.target.value)} placeholder="e.g. Data Engineer version" /></label><label className="field"><span>Target role</span><div className="select-control"><select value={cvTargetRole} onChange={(event) => setCvTargetRole(event.target.value as RoleKey)}><option value="">Use workspace role</option>{Object.entries(roles).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select><ChevronDown size={16} /></div></label></div>
                  {cvVersions.length > 0 && <div className="cv-version-list"><strong>Saved CV versions</strong>{cvVersions.slice(0, 6).map((version) => <span key={version.id}>{version.cv_label || version.original_filename} · {version.target_role ? roles[version.target_role as Exclude<RoleKey, "">] || version.target_role : "general"} · {version.status.replaceAll("_", " ")}</span>)}</div>}
-                <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub projects</strong><p>Use a profile URL to choose from all public repositories</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://github.com/username" value={github} onChange={(event) => { setGithub(event.target.value); setGithubProjects([]); setGithubCandidates([]); }} /></div></label>
+                <label className="source-row"><span className="source-icon"><GitBranch size={19} /></span><div><strong>GitHub projects</strong><p>Use a profile URL to choose from all public repositories</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://github.com/username" value={github} onChange={(event) => { setGithub(event.target.value); setGithubProjects([]); setGithubCandidates([]); setGithubProfileLookupDone(false); }} /></div></label>
                 {githubCandidates.length > 0 && <div className="github-candidates"><div><strong>Select projects to analyse</strong><span>{selectedGithubUrls.size} selected</span></div>{githubCandidates.map((candidate) => <label key={candidate.url}><input type="checkbox" checked={selectedGithubUrls.has(candidate.url)} onChange={() => setSelectedGithubUrls((current) => { const next = new Set(current); if (next.has(candidate.url)) next.delete(candidate.url); else next.add(candidate.url); return next; })} /><span><b>{candidate.name}</b><small>{candidate.language ?? "Repository"} · {candidate.stars} stars</small></span></label>)}</div>}
+                {githubProfileLookupDone && githubCandidates.length === 0 && /^https?:\/\/github\.com\/[^/]+\/?$/.test(github.trim()) && <div className="github-empty-state"><GitBranch size={17} /><div><strong>No public repositories found</strong><span>This profile cannot provide project evidence yet. Add a repository URL or use another profile.</span></div></div>}
                 <label className="source-row"><span className="source-icon"><Link2 size={19} /></span><div><strong>Portfolio or project</strong><p>Optional public URL</p></div><div className="url-control"><Link2 size={15} /><input placeholder="https://" value={portfolio} onChange={(event) => setPortfolio(event.target.value)} /></div></label>
                 <button className="manual-source"><Plus size={16} />Add evidence manually</button>
               </div>
@@ -1507,7 +1564,7 @@ export default function App() {
               <div className="consent"><label><input type="checkbox" defaultChecked /><span>I understand that generated findings must be reviewed before I use them in an application.</span></label></div>
               <div className="not-live"><strong>Evidence processing</strong><p>CVs are stored privately and must pass file-signature and malware checks before extraction. Evidence extraction begins only after a clean result.</p></div>
               {suggestions.length > 0 && <div className="evidence-review"><div className="evidence-review-heading"><strong>Review extracted evidence</strong><span>{confirmedSuggestions.size} of {suggestions.length} selected</span></div>{suggestions.map((item) => <label className="evidence-item" key={item.id}><input type="checkbox" checked={confirmedSuggestions.has(item.id)} onChange={() => setConfirmedSuggestions((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} /><span><b>{item.canonical_skill}</b><small>{item.category} · proposed level {item.proposed_level}/5 · {Math.round(item.confidence * 100)}% match</small><q>{item.excerpt}</q></span></label>)}</div>}
-              {githubProjects.map((githubProject) => <div className="evidence-review" key={githubProject.id}><div className="evidence-review-heading"><strong>Review GitHub evidence · {githubProject.repository}</strong><span>{githubProject.suggestions.filter((item) => confirmedGithub.has(item.id)).length} of {githubProject.suggestions.length} selected</span></div>{githubProject.suggestions.map((item) => <label className="evidence-item" key={item.id}><input type="checkbox" checked={confirmedGithub.has(item.id)} onChange={() => setConfirmedGithub((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} /><span><b>{item.canonical_skill}</b><small>{item.category} · conservative level {item.proposed_level}/5 · public repository</small><q>{item.excerpt}</q></span></label>)}</div>)}
+              {githubProjects.map((githubProject) => <div className="evidence-review" key={githubProject.id}><div className="evidence-review-heading"><strong>Review GitHub evidence · {githubProject.repository}</strong><div className="evidence-review-heading-actions"><span>{githubProject.suggestions.filter((item) => confirmedGithub.has(item.id)).length} of {githubProject.suggestions.length} selected</span><button type="button" className="text-button" onClick={() => refreshGithubProject(githubProject)}><RefreshCw size={14} />Re-analyse</button></div></div>{githubProject.suggestions.map((item) => <label className="evidence-item" key={item.id}><input type="checkbox" checked={confirmedGithub.has(item.id)} onChange={() => setConfirmedGithub((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} /><span><b>{item.canonical_skill}</b><small>{item.category} · conservative level {item.proposed_level}/5 · public repository</small><q>{item.excerpt}</q></span></label>)}</div>)}
             </>}
 
             {error && <p className="form-error" role="alert">{error}</p>}
