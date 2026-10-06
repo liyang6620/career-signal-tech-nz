@@ -10,6 +10,7 @@ from app.database import Base, get_db
 from app.github import GithubSnapshot
 from app.main import app
 from app.models import (
+    CandidateSkillEvidence,
     CanonicalSkill,
     DocumentExtraction,
     EmailOutbox,
@@ -521,6 +522,72 @@ def test_github_refresh_preserves_reviewed_suggestions_and_adds_new_findings(
     decisions = [{"suggestion_id": item["id"], "decision": "confirmed"} for item in refreshed.json()["suggestions"]]
     reviewed_again = client.post(f"/api/v1/evidence/github/{project['id']}/review", headers=headers, json={"decisions": decisions})
     assert reviewed_again.status_code == 200
+
+
+def test_github_review_rejection_removes_previously_confirmed_evidence(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshots = [
+        GithubSnapshot(
+            owner="candidate", repository="reviewable", canonical_url="https://github.com/candidate/reviewable",
+            description="Initial", default_branch="main", stars=1, language="Python", topics=[],
+            readme="Built a FastAPI service.",
+        ),
+        GithubSnapshot(
+            owner="candidate", repository="reviewable", canonical_url="https://github.com/candidate/reviewable",
+            description="Updated", default_branch="main", stars=2, language="Python", topics=["aws"],
+            readme="Built a FastAPI service and deployed it on AWS.",
+        ),
+    ]
+    monkeypatch.setattr("app.main.fetch_snapshot", lambda url: snapshots.pop(0))
+    auth = register(client)
+    headers = {"Authorization": f"Bearer {auth['access_token']}"}
+
+    created = client.post(
+        "/api/v1/evidence/github", headers=headers,
+        json={"url": "https://github.com/candidate/reviewable"},
+    )
+    project = created.json()
+    fastapi_suggestion = next(
+        item for item in project["suggestions"] if item["canonical_skill"] == "FastAPI"
+    )
+    confirmed = client.post(
+        f"/api/v1/evidence/github/{project['id']}/review", headers=headers,
+        json={"decisions": [
+            {"suggestion_id": item["id"], "decision": "confirmed"}
+            for item in project["suggestions"]
+        ]},
+    )
+    assert confirmed.status_code == 200
+
+    refreshed = client.post(
+        f"/api/v1/evidence/github/{project['id']}/refresh", headers=headers
+    )
+    assert refreshed.status_code == 200
+    assert refreshed.json()["status"] == "awaiting_review"
+    decisions = [
+        {
+            "suggestion_id": item["id"],
+            "decision": "rejected" if item["id"] == fastapi_suggestion["id"] else "confirmed",
+        }
+        for item in refreshed.json()["suggestions"]
+    ]
+    rejected = client.post(
+        f"/api/v1/evidence/github/{project['id']}/review", headers=headers,
+        json={"decisions": decisions},
+    )
+    assert rejected.status_code == 200
+
+    graph = client.get("/api/v1/evidence/graph?role_family=ai", headers=headers)
+    assert graph.status_code == 200
+    assert not any(
+        item["skill_slug"] == "fastapi" and item["source_type"] == "github"
+        for item in graph.json()["evidence"]
+    )
+    with client.testing_session() as session:  # type: ignore[attr-defined]
+        assert session.scalar(select(CandidateSkillEvidence).where(
+            CandidateSkillEvidence.github_suggestion_id == UUID(fastapi_suggestion["id"])
+        )) is None
 
 
 def test_role_decoder_and_governed_market_import(client: TestClient) -> None:

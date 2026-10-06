@@ -1039,7 +1039,7 @@ export default function App() {
     if (!token) return;
     setError("");
     try {
-      const response = await fetch(`${API_URL}/api/v1/evidence/github/${project.id}/refresh`, {
+      const response = await authenticatedFetch(`${API_URL}/api/v1/evidence/github/${project.id}/refresh`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });

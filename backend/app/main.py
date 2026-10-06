@@ -1800,7 +1800,9 @@ def role_decoder_history_detail(
         analysis.role_family,
         [item.model_dump() for item in result.skill_demands],
     )
-    result = result.model_copy(update={"analysis_id": analysis.id, "skill_demands": benchmark_demands})
+    result_payload = result.model_dump()
+    result_payload.update({"analysis_id": analysis.id, "skill_demands": benchmark_demands})
+    result = RoleDecodeResponse.model_validate(result_payload)
     return JobAnalysisDetailResponse(
         id=analysis.id,
         title=analysis.title,
@@ -2289,6 +2291,13 @@ def review_github_project(
                     evidence.confidence = suggestion.confidence
                     evidence.excerpt = suggestion.excerpt
                     evidence.locator = project.canonical_url
+        else:
+            evidence = db.scalar(select(CandidateSkillEvidence).where(
+                CandidateSkillEvidence.github_suggestion_id == suggestion.id,
+                CandidateSkillEvidence.user_id == user.id,
+            ))
+            if evidence is not None:
+                db.delete(evidence)
     project.status = "reviewed"
     audit(db, "evidence.github_reviewed", user_id=user.id, metadata={"project_id": str(project.id)})
     db.commit()
