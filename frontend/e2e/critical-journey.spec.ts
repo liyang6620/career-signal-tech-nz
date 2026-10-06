@@ -157,10 +157,10 @@ test("personal capability profile shows evidence analysis", async ({ page }) => 
   await page.goto("/app/profile");
 
   await expect(page.getByRole("heading", { name: "All the evidence you can currently prove" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "What your evidence says beyond the skill list" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What your evidence currently shows" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Three views of evidence quality" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Why this profile is evidence-led" })).toBeVisible();
-  await expect(page.getByRole("img", { name: "Personal evidence skill network" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Evidence strength by skill" })).toBeVisible();
   const evidenceRows = page.locator(".personal-graph-register > div");
   await expect(evidenceRows).toHaveCount(2);
   await expect(evidenceRows.filter({ hasText: "SQL" })).toHaveCount(1);
