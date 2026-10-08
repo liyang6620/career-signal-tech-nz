@@ -15,3 +15,18 @@ html {
 }
 
 body { margin: 0; }
+
+.native-app body {
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  overscroll-behavior-y: none;
+}
+
+.native-app button,
+.native-app a,
+.native-app label,
+.native-app input,
+.native-app select,
+.native-app textarea { touch-action: manipulation; }

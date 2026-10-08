@@ -5,6 +5,7 @@ This runbook deploys CareerSignal as a controlled interview demonstration. It is
 ## Topology
 
 - Cloudflare Pages: React/PWA frontend
+- GitHub Actions artifact: debug-signed Android APK built from the same React client
 - Render Free service `careersignal-api`: FastAPI, Alembic migrations and the background worker in one demo container
 - Supabase Free project: PostgreSQL/pgvector and a private S3-compatible bucket
 - Resend Free: SMTP delivery
@@ -85,6 +86,12 @@ Environment variable: VITE_API_URL=https://<render-api-host>
 ```
 
 Cloudflare Pages serves the Vite SPA's clean client-side routes directly. HTTPS enables the PWA installation prompt and service worker.
+
+## Android APK
+
+The Capacitor wrapper uses the bundled frontend and calls the same Render API from the secure `https://localhost` WebView origin. Keep that origin in `CORS_ORIGINS` alongside the Cloudflare Pages origin. Run `npm run android:apk` on Windows with Java 21 and Android SDK 35, or download the `CareerSignal-debug-apk` artifact from the repository's **Android APK** workflow.
+
+The checked-in Android project contains no signing secret. Its debug certificate is suitable only for sideloaded interview demonstrations. Create and protect a release keystore outside Git before publishing through an app store.
 
 ## Verification
 

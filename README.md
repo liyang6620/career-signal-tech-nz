@@ -4,7 +4,7 @@ CareerSignal is an evidence-based career intelligence platform for New Zealand c
 
 This repository is being developed as an early production product, not a one-off portfolio dashboard. The current beta includes a complete authenticated journey, persistent candidate evidence, CV and GitHub review, live-data-only market exploration, role decoding, capability profiling, career-path exploration, cited employer evidence and application tracking. Market counts describe only the permitted New Zealand job records currently indexed by CareerSignal; they are directional samples, not official labour-market totals.
 
-CareerSignal is also packaged as an installable Progressive Web App (PWA). On supported desktop and mobile browsers it can be installed from the public entry screen and launched in a standalone window with its own CareerSignal icon. The application shell and static assets are available offline; authentication, private evidence and current market data always remain network-backed and are never placed in the service-worker cache.
+CareerSignal is packaged as both an installable Progressive Web App (PWA) and a native Android APK. The Android application uses Capacitor to ship the same tested React product in an Android WebView while retaining a branded launcher icon, splash screen, system status-bar integration, hardware back-button behaviour and safe-area handling. Authentication, private evidence and current market data remain network-backed.
 
 ## Live interview demo
 
@@ -57,7 +57,7 @@ The routed application surfaces are:
 - `/app/jobs` — persisted application tracker
 - `/app/settings` — account, export and deletion controls
 
-## Installable app
+## Installable apps
 
 The web client ships with a standards-based application shell rather than a separate fork of the product:
 
@@ -68,6 +68,22 @@ The web client ships with a standards-based application shell rather than a sepa
 - Maskable Android and Apple touch icons are generated from the same CareerSignal brand mark used inside the product.
 
 Installation requires a production build served over HTTPS, or `localhost` during development. Chrome and Edge expose the install action when their PWA criteria are met. Safari users can install through **Add to Home Screen**. The installed application still requires a connection for sign-in, CV processing, GitHub analysis and live market evidence.
+
+### Android APK
+
+The Android wrapper lives in `frontend/android` and uses the application ID `nz.co.careersignal.app`. It targets Android 15 (API 35), supports Android 6.0 and later, permits HTTPS networking only, disables Android cloud backup for private session data and requests only the `INTERNET` permission.
+
+Every frontend change on `main` runs the **Android APK** GitHub Actions workflow. Download `CareerSignal-debug-apk` from that workflow's artifacts and install `app-debug.apk` on an Android device after allowing installation from the browser or file manager used to open it. The debug-signed build is intended for direct interview demonstrations; Play Store distribution requires a private release keystore and a separately signed release build.
+
+Build the same APK locally with Java 21 and Android SDK 35:
+
+```bash
+cd frontend
+npm ci
+npm run android:apk
+```
+
+The output is `frontend/android/app/build/outputs/apk/debug/app-debug.apk`. `npm run android:sync` rebuilds the web bundle with the public Render API URL and copies it into the Android project before any native build.
 
 The [product scope](docs/product-scope.md) defines users, module boundaries, the role taxonomy, evidence rules and phased delivery.
 
