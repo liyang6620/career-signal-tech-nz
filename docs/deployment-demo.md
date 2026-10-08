@@ -54,6 +54,7 @@ STORAGE_ENDPOINT=https://<project-ref>.storage.supabase.co/storage/v1/s3
 STORAGE_PUBLIC_ENDPOINT=https://<project-ref>.storage.supabase.co/storage/v1/s3
 STORAGE_REGION=<Supabase-project-region>
 STORAGE_BUCKET=career-signal-private
+STORAGE_MANAGE_CORS=false
 STORAGE_ACCESS_KEY=<Supabase-S3-access-key>
 STORAGE_SECRET_KEY=<Supabase-S3-secret-key>
 ```

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     storage_public_endpoint: str = "http://localhost:9000"
     storage_region: str = "us-east-1"
     storage_bucket: str = "career-signal-private"
+    storage_manage_cors: bool = True
     storage_access_key: str = "career-signal"
     storage_secret_key: str = "development-storage-secret"
     clamav_host: str = "localhost"

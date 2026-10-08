@@ -36,6 +36,8 @@ def ensure_bucket() -> None:
         client.head_bucket(Bucket=settings.storage_bucket)
     except client.exceptions.ClientError:
         client.create_bucket(Bucket=settings.storage_bucket)
+    if not settings.storage_manage_cors:
+        return
     try:
         client.put_bucket_cors(
             Bucket=settings.storage_bucket,
