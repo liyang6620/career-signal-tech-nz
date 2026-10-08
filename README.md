@@ -4,6 +4,8 @@ CareerSignal is an evidence-based career intelligence platform for New Zealand c
 
 This repository is being developed as an early production product, not a one-off portfolio dashboard. The current beta includes a complete authenticated journey, persistent candidate evidence, CV and GitHub review, live-data-only market exploration, role decoding, capability profiling, career-path exploration, cited employer evidence and application tracking. Market counts describe only the permitted New Zealand job records currently indexed by CareerSignal; they are directional samples, not official labour-market totals.
 
+CareerSignal is also packaged as an installable Progressive Web App (PWA). On supported desktop and mobile browsers it can be installed from the public entry screen and launched in a standalone window with its own CareerSignal icon. The application shell and static assets are available offline; authentication, private evidence and current market data always remain network-backed and are never placed in the service-worker cache.
+
 ## Why it is different
 
 Most career tools rewrite text or return opaque match percentages. CareerSignal treats employability as an evidence and data-quality problem:
@@ -46,6 +48,18 @@ The routed application surfaces are:
 - `/app/profile` — portable capability report and role-family alignment
 - `/app/jobs` — persisted application tracker
 - `/app/settings` — account, export and deletion controls
+
+## Installable app
+
+The web client ships with a standards-based application shell rather than a separate fork of the product:
+
+- `manifest.webmanifest` supplies the app identity, standalone launch mode, branded icons and workspace shortcuts.
+- `sw.js` caches only same-origin navigation and static presentation assets. API routes, mutations and cross-origin requests are excluded.
+- An install action appears on the public entry screen when the browser emits the PWA installation prompt.
+- A dedicated offline screen is used when the application shell has not previously been cached.
+- Maskable Android and Apple touch icons are generated from the same CareerSignal brand mark used inside the product.
+
+Installation requires a production build served over HTTPS, or `localhost` during development. Chrome and Edge expose the install action when their PWA criteria are met. Safari users can install through **Add to Home Screen**. The installed application still requires a connection for sign-in, CV processing, GitHub analysis and live market evidence.
 
 The [product scope](docs/product-scope.md) defines users, module boundaries, the role taxonomy, evidence rules and phased delivery.
 
@@ -116,6 +130,16 @@ npm install
 npm run dev
 ```
 
+Create a production build to verify the installable application shell:
+
+```bash
+cd frontend
+npm run build
+npm run preview
+```
+
+Open the preview over `localhost`, then use the browser's install action. Service-worker registration is intentionally disabled in Vite development mode so stale caches cannot interfere with normal frontend work.
+
 API:
 
 ```bash
@@ -152,7 +176,7 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke_test.ps1
 docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm backend-test
 ```
 
-CI runs the same checks on every pull request and push to `main`. The browser suite protects public entry, guarded routing, legacy route redirects, the capability profile, application-to-profile navigation, responsive career-path readability and account export.
+CI runs the same checks on every pull request and push to `main`. The browser suite protects public entry, the installable application shell, guarded routing, legacy route redirects, the capability profile, application-to-profile navigation, responsive career-path readability and account export.
 
 ## Evidence retrieval
 

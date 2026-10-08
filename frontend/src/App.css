@@ -93,6 +93,8 @@ button { -webkit-tap-highlight-color: transparent; }
 .welcome-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 19px; margin-top: 29px; }
 .welcome-actions .primary-button { min-height: 43px; }
 .welcome-secondary { min-height: 44px; display: inline-flex; align-items: center; border: 0; background: transparent; color: var(--accent); font-size: 13px; font-weight: 700; cursor: pointer; }
+.welcome-install { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 15px; border: 1px solid rgba(255, 255, 255, .62); border-radius: 3px; background: rgba(9, 34, 39, .22); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+.welcome-install:hover { border-color: #fff; background: rgba(9, 34, 39, .42); }
 .welcome-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .welcome-grid article { min-height: 171px; padding: 24px 27px 24px 0; border-right: 1px solid var(--line); }
 .welcome-grid article:not(:first-child) { padding-left: 27px; }
@@ -2548,7 +2550,8 @@ body { background: var(--canvas); color: var(--ink); }
   .welcome-hero .welcome-lede { font-size: 16px; line-height: 1.58; }
   .welcome-hero .welcome-actions { align-items: stretch; gap: 10px; }
   .welcome-hero .primary-button,
-  .welcome-hero .welcome-secondary { width: 100%; }
+  .welcome-hero .welcome-secondary,
+  .welcome-hero .welcome-install { width: 100%; justify-content: center; }
   .welcome-photo-credit { right: 12px; bottom: 10px; font-size: 9px; }
   .welcome-content { width: calc(100% - 40px); }
   .welcome-grid article,

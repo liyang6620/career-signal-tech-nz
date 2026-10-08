@@ -47,6 +47,7 @@ import "./App.css";
 
 type Step = 1 | 2 | 3;
 type RoleKey = "" | "software" | "data-analyst" | "data-engineer" | "ai" | "cloud-devops";
+type PwaInstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
 const roles: Record<Exclude<RoleKey, "">, string> = {
   software: "Software Engineer",
@@ -544,6 +545,26 @@ function AuthScreen({ onAuthenticated, initialMode = "register", onBack, onRoute
 }
 
 function WelcomeScreen({ onChoose }: { onChoose: (mode: "login" | "register") => void }) {
+  const [installPrompt, setInstallPrompt] = useState<PwaInstallEvent | null>(null);
+  useEffect(() => {
+    const capturePrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as PwaInstallEvent);
+    };
+    const clearPrompt = () => setInstallPrompt(null);
+    window.addEventListener("beforeinstallprompt", capturePrompt);
+    window.addEventListener("appinstalled", clearPrompt);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", capturePrompt);
+      window.removeEventListener("appinstalled", clearPrompt);
+    };
+  }, []);
+  async function installApp() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  }
   return <div className="welcome-page">
     <header className="welcome-nav">
       <div className="auth-brand"><span className="auth-brand-mark"><CareerSignalMark size={30} /></span><strong>CareerSignal</strong></div>
@@ -561,6 +582,7 @@ function WelcomeScreen({ onChoose }: { onChoose: (mode: "login" | "register") =>
           <div className="welcome-actions">
             <button className="primary-button" onClick={() => onChoose("register")}>Create a career profile <ArrowRight size={15} /></button>
             <button className="welcome-secondary" onClick={() => onChoose("login")}>Sign in to your profile</button>
+            {installPrompt && <button className="welcome-install" onClick={installApp}><Download size={16} />Install app</button>}
           </div>
         </div>
         <a className="welcome-photo-credit" href="https://unsplash.com/photos/OtP_YdrgDG4" target="_blank" rel="noreferrer">Auckland photograph by Timo Volz / Unsplash</a>

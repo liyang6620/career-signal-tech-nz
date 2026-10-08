@@ -130,6 +130,42 @@ test("public entry and protected routing remain usable", async ({ page }) => {
   await expect(page).toHaveURL(/\/login\?returnTo=%2Fapp%2Fmarket/);
 });
 
+test("the public entry exposes an installable application shell", async ({ page, request }) => {
+  await page.addInitScript(() => {
+    window.addEventListener("beforeinstallprompt", (event) => event.preventDefault());
+  });
+  await page.goto("/");
+
+  const manifestLink = page.locator('link[rel="manifest"]');
+  await expect(manifestLink).toHaveAttribute("href", "/manifest.webmanifest");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#173a55");
+
+  const manifestResponse = await request.get("/manifest.webmanifest");
+  expect(manifestResponse.ok()).toBeTruthy();
+  const manifest = await manifestResponse.json();
+  expect(manifest.name).toBe("CareerSignal Tech NZ");
+  expect(manifest.display).toBe("standalone");
+  expect(manifest.icons.map((icon: { sizes: string }) => icon.sizes)).toEqual(["192x192", "512x512", "512x512"]);
+
+  await expect((await request.get("/sw.js")).ok()).toBeTruthy();
+  await expect((await request.get("/offline.html")).ok()).toBeTruthy();
+  await expect((await request.get("/icons/app-icon-192.png")).ok()).toBeTruthy();
+  await expect((await request.get("/icons/app-icon-512.png")).ok()).toBeTruthy();
+
+  await page.evaluate(() => {
+    const event = new Event("beforeinstallprompt", { cancelable: true });
+    Object.assign(event, {
+      prompt: () => Promise.resolve(),
+      userChoice: Promise.resolve({ outcome: "accepted" }),
+    });
+    window.dispatchEvent(event);
+  });
+  const installButton = page.getByRole("button", { name: "Install app" });
+  await expect(installButton).toBeVisible();
+  await installButton.click();
+  await expect(installButton).toBeHidden();
+});
+
 test("the legacy plan route resolves to the capability profile", async ({ page }) => {
   await mockAuthenticatedApi(page);
   await page.goto("/app/plan");
