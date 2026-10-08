@@ -7,7 +7,7 @@ This runbook deploys CareerSignal as a controlled interview demonstration. It is
 - Cloudflare Pages: React/PWA frontend
 - Render Free service `careersignal-api`: FastAPI, Alembic migrations and the background worker in one demo container
 - Supabase Free project: PostgreSQL/pgvector and a private S3-compatible bucket
-- Brevo Free: SMTP delivery
+- Resend Free: SMTP delivery
 
 Keep every CareerSignal resource separate from the football project. Never reuse its database, service, bucket, connection string or secret. Both Render services share the workspace's monthly free-instance-hour pool. Free services do not consume instance hours while spun down, so do not configure uptime monitors or keep-alive requests.
 
@@ -44,10 +44,10 @@ JWT_SECRET=<at-least-32-random-bytes>
 INGESTION_API_KEY=<independent-random-secret>
 EMBEDDING_MODE=hash
 MALWARE_SCAN_MODE=trusted_demo
-SMTP_HOST=smtp-relay.brevo.com
+SMTP_HOST=smtp.resend.com
 SMTP_PORT=587
-SMTP_USERNAME=<Brevo-SMTP-login>
-SMTP_PASSWORD=<Brevo-SMTP-key>
+SMTP_USERNAME=resend
+SMTP_PASSWORD=<Resend-API-key>
 SMTP_FROM_EMAIL=<verified-sender>
 SMTP_USE_TLS=true
 STORAGE_ENDPOINT=https://<project-ref>.storage.supabase.co/storage/v1/s3
@@ -83,8 +83,10 @@ The existing `_redirects` file preserves client-side routing. HTTPS enables the 
 After deployment:
 
 1. Confirm `/health` and `/ready` return HTTP 200.
-2. Create and verify the owner demo account through Brevo.
+2. Create and verify the owner demo account through Resend.
 3. Upload only the redacted demonstration CV and confirm it reaches evidence review.
 4. Exercise GitHub analysis, role decoding, profile, pathways and the application tracker.
 5. Install the PWA and verify an offline public-shell reload.
 6. Confirm no secret appears in the frontend bundle, repository, build log or browser storage.
+
+Resend's free plan currently includes 3,000 transactional emails per month and 100 per day. Without a verified custom domain, use Resend's test sender only for the email address that owns the Resend account. Keep public self-registration disabled in practice by sharing only the pre-verified owner demo account until a sending domain is configured.
