@@ -6,6 +6,14 @@ This repository is being developed as an early production product, not a one-off
 
 CareerSignal is also packaged as an installable Progressive Web App (PWA). On supported desktop and mobile browsers it can be installed from the public entry screen and launched in a standalone window with its own CareerSignal icon. The application shell and static assets are available offline; authentication, private evidence and current market data always remain network-backed and are never placed in the service-worker cache.
 
+## Live interview demo
+
+- Web app: https://career-signal-tech-nz.pages.dev
+- API health: https://careersignal-api-ze3r.onrender.com/health
+- API readiness: https://careersignal-api-ze3r.onrender.com/ready
+
+The demo uses free infrastructure and is intended for portfolio interviews rather than unrestricted public use. The Render service sleeps after inactivity, so the first request can take up to about a minute. Email verification uses Resend's test sender and, until a custom sending domain is configured, is limited to the Resend account owner's address. CV uploads are restricted to owner-controlled, redacted files under the trusted-demo security profile.
+
 ## Why it is different
 
 Most career tools rewrite text or return opaque match percentages. CareerSignal treats employability as an evidence and data-quality problem:

@@ -9,6 +9,13 @@ This runbook deploys CareerSignal as a controlled interview demonstration. It is
 - Supabase Free project: PostgreSQL/pgvector and a private S3-compatible bucket
 - Resend Free: SMTP delivery
 
+Current public endpoints:
+
+```text
+Frontend: https://career-signal-tech-nz.pages.dev
+API: https://careersignal-api-ze3r.onrender.com
+```
+
 Keep every CareerSignal resource separate from the football project. Never reuse its database, service, bucket, connection string or secret. Both Render services share the workspace's monthly free-instance-hour pool. Free services do not consume instance hours while spun down, so do not configure uptime monitors or keep-alive requests.
 
 ## Demo security boundary
@@ -77,7 +84,7 @@ Build output directory: dist
 Environment variable: VITE_API_URL=https://<render-api-host>
 ```
 
-The existing `_redirects` file preserves client-side routing. HTTPS enables the PWA installation prompt and service worker.
+Cloudflare Pages serves the Vite SPA's clean client-side routes directly. HTTPS enables the PWA installation prompt and service worker.
 
 ## Verification
 
