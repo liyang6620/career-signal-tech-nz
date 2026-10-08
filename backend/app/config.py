@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -29,6 +30,7 @@ class Settings(BaseSettings):
     storage_secret_key: str = "development-storage-secret"
     clamav_host: str = "localhost"
     clamav_port: int = 3310
+    malware_scan_mode: Literal["clamav", "trusted_demo"] = "clamav"
     upload_max_bytes: int = 10 * 1024 * 1024
     ingestion_api_key: str = "development-ingestion-key"
     # This model has a stable fastembed/Qdrant distribution and 384 dimensions.

@@ -13,7 +13,7 @@ from app.models import (
     EvidenceUpload,
     User,
 )
-from app.worker import persist_parsed_evidence, valid_file_signature
+from app.worker import malware_verdict, persist_parsed_evidence, valid_file_signature
 
 
 def test_file_signatures_match_declared_type() -> None:
@@ -24,6 +24,22 @@ def test_file_signatures_match_declared_type() -> None:
     )
     assert not valid_file_signature("application/pdf", b"PK\x03\x04")
     assert not valid_file_signature("application/octet-stream", b"%PDF")
+
+
+def test_trusted_demo_mode_skips_clamav(monkeypatch) -> None:
+    class DemoSettings:
+        malware_scan_mode = "trusted_demo"
+        clamav_host = "must-not-connect"
+        clamav_port = 3310
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("trusted_demo must not connect to ClamAV")
+
+    monkeypatch.setattr("app.worker.clamd.ClamdNetworkSocket", fail_if_called)
+    verdict, signature = malware_verdict(object(), "demo-upload", DemoSettings())
+
+    assert verdict == "OK"
+    assert signature is None
 
 
 def test_docx_parsing_and_evidence_suggestions(tmp_path) -> None:

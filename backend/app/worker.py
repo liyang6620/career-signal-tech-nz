@@ -42,6 +42,18 @@ def valid_file_signature(content_type: str, signature: bytes) -> bool:
     return expected.get(content_type) == signature
 
 
+def malware_verdict(file_object, upload_id, settings) -> tuple[str, str | None]:
+    if settings.malware_scan_mode == "trusted_demo":
+        logger.warning(
+            "Trusted demo upload mode accepted signature-validated file %s without malware scanning",
+            upload_id,
+        )
+        return "OK", None
+    file_object.seek(0)
+    result = clamd.ClamdNetworkSocket(settings.clamav_host, settings.clamav_port).instream(file_object)
+    return next(iter(result.values()))
+
+
 def claim_job() -> ProcessingJob | None:
     now = datetime.now(UTC)
     with SessionLocal() as db:
@@ -225,9 +237,7 @@ def process_scan(job: ProcessingJob) -> None:
                     persisted_job.status = "completed"
                     db.commit()
                     return
-                file_object.seek(0)
-                result = clamd.ClamdNetworkSocket(settings.clamav_host, settings.clamav_port).instream(file_object)
-            verdict, signature = next(iter(result.values()))
+                verdict, signature = malware_verdict(file_object, upload.id, settings)
             if verdict == "FOUND":
                 delete_object(upload.storage_key)
                 upload.status = "rejected"
