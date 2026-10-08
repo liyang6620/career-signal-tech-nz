@@ -5,12 +5,11 @@ This runbook deploys CareerSignal as a controlled interview demonstration. It is
 ## Topology
 
 - Cloudflare Pages: React/PWA frontend
-- Northflank Sandbox service `careersignal-api`: FastAPI and Alembic migrations
-- Northflank Sandbox service `careersignal-worker`: document parsing, email outbox and governed collectors
+- Render Free service `careersignal-api`: FastAPI, Alembic migrations and the background worker in one demo container
 - Supabase Free project: PostgreSQL/pgvector and a private S3-compatible bucket
 - Brevo Free: SMTP delivery
 
-Keep every CareerSignal resource separate from the football project. Never reuse its database, service, bucket, connection string or secret.
+Keep every CareerSignal resource separate from the football project. Never reuse its database, service, bucket, connection string or secret. Both Render services share the workspace's monthly free-instance-hour pool. Free services do not consume instance hours while spun down, so do not configure uptime monitors or keep-alive requests.
 
 ## Demo security boundary
 
@@ -32,26 +31,11 @@ Supabase S3 endpoints follow this form:
 https://<project-ref>.storage.supabase.co/storage/v1/s3
 ```
 
-## Northflank services
+## Render service
 
-Connect both services to the GitHub repository and use `backend` as the build context.
+Create a Blueprint from the repository's `render.yaml`. It builds `backend/Dockerfile.demo`, which starts the worker beside the API in one free web service. This is appropriate for an interview demo because both processes sleep together; production should separate their scaling and lifecycle.
 
-API service:
-
-```text
-Dockerfile: Dockerfile
-Port: 8000 HTTP
-Health check: GET /ready
-```
-
-Worker service:
-
-```text
-Dockerfile: Dockerfile.worker
-No public port
-```
-
-Configure these secrets on both services where applicable:
+Configure the unsynchronised secrets requested by the Blueprint:
 
 ```text
 ENVIRONMENT=production
@@ -74,7 +58,7 @@ STORAGE_ACCESS_KEY=<Supabase-S3-access-key>
 STORAGE_SECRET_KEY=<Supabase-S3-secret-key>
 ```
 
-The API also needs the final origins after the two public URLs exist:
+The service also needs the final origins after the two public URLs exist:
 
 ```text
 CORS_ORIGINS=https://<pages-project>.pages.dev
@@ -89,7 +73,7 @@ Connect the GitHub repository with:
 Root directory: frontend
 Build command: npm run build
 Build output directory: dist
-Environment variable: VITE_API_URL=https://<northflank-api-host>
+Environment variable: VITE_API_URL=https://<render-api-host>
 ```
 
 The existing `_redirects` file preserves client-side routing. HTTPS enables the PWA installation prompt and service worker.

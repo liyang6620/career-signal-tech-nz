@@ -122,7 +122,7 @@ See [docs/architecture.md](docs/architecture.md) for boundaries and the producti
 
 Create a local `.env` from `.env.example` and add secrets locally. `.env` is ignored by Git and must never be committed.
 
-For the no-card interview-demo deployment using Cloudflare Pages, Northflank, Supabase and Brevo, follow [docs/deployment-demo.md](docs/deployment-demo.md). That profile explicitly restricts uploads to owner-controlled, redacted CVs and does not represent the unrestricted production security posture.
+For the no-card interview-demo deployment using Cloudflare Pages, Render, Supabase and Brevo, follow [docs/deployment-demo.md](docs/deployment-demo.md). That profile explicitly restricts uploads to owner-controlled, redacted CVs and does not represent the unrestricted production security posture.
 
 Frontend:
 

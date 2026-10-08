@@ -1,0 +1,14 @@
+FROM python:3.12-slim AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY pyproject.toml ./
+COPY app ./app
+COPY evaluation ./evaluation
+COPY alembic.ini ./
+COPY migrations ./migrations
+COPY run_demo.sh ./run_demo.sh
+RUN pip install --no-cache-dir . && chmod +x ./run_demo.sh
+RUN useradd --create-home appuser && chown -R appuser:appuser /app
+USER appuser
+EXPOSE 8000
+CMD ["./run_demo.sh"]
