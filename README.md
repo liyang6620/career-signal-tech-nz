@@ -1,5 +1,7 @@
 # CareerSignal Tech NZ
 
+[![CI](https://github.com/liyang6620/career-signal-tech-nz/actions/workflows/ci.yml/badge.svg)](https://github.com/liyang6620/career-signal-tech-nz/actions/workflows/ci.yml) [![Android APK](https://github.com/liyang6620/career-signal-tech-nz/actions/workflows/android-apk.yml/badge.svg)](https://github.com/liyang6620/career-signal-tech-nz/actions/workflows/android-apk.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 CareerSignal is an evidence-based career intelligence platform for New Zealand computing and digital-technology job seekers. It analyses job postings, decodes the real work behind inconsistent role titles, connects market requirements to proof found in CVs and GitHub projects, and builds explainable pathways between technology careers.
 
 This repository is being developed as an early production product, not a one-off portfolio dashboard. The current beta includes a complete authenticated journey, persistent candidate evidence, CV and GitHub review, live-data-only market exploration, role decoding, capability profiling, career-path exploration, cited employer evidence and application tracking. Market counts describe only the permitted New Zealand job records currently indexed by CareerSignal; they are directional samples, not official labour-market totals.
