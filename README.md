@@ -28,6 +28,14 @@ The API uses Render's free tier and may need roughly 10–60 seconds to wake aft
 4. Open **Applications**, select two saved roles and compare technical requirements and decision factors.
 5. Open **Pathways** to turn the highest-priority evidence gap into a next project decision.
 
+## Product tour
+
+| Evidence-led capability profile | Job-advertisement decoder |
+| --- | --- |
+| [![CareerSignal capability profile showing reviewed skills, confidence and evidence maturity](docs/screenshots/capability-profile.png)](docs/screenshots/capability-profile.png) | [![CareerSignal role decoder showing eligibility checks, role-family proximity and evidence comparison](docs/screenshots/role-decoder.png)](docs/screenshots/role-decoder.png) |
+| **Saved-role comparison** | **Career pathway planner** |
+| [![CareerSignal comparison of two saved roles and their technical requirements](docs/screenshots/saved-role-comparison.png)](docs/screenshots/saved-role-comparison.png) | [![CareerSignal pathway planner showing adjacent roles and the next evidence gap](docs/screenshots/career-pathways.png)](docs/screenshots/career-pathways.png) |
+
 ## Product capabilities
 
 - Private CV ingestion with file checks, extraction status and user-reviewed evidence
