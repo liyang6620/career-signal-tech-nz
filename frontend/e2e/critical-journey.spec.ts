@@ -130,7 +130,8 @@ test("public entry and protected routing remain usable", async ({ page }) => {
   await expect(page).toHaveURL(/\/login\?returnTo=%2Fapp%2Fmarket/);
 });
 
-test("the public entry exposes an installable application shell", async ({ page, request }) => {
+test("the public entry exposes an installable application shell", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name === "mobile-chrome", "Mobile browsers own the native install prompt and do not expose beforeinstallprompt consistently.");
   await page.addInitScript(() => {
     window.addEventListener("beforeinstallprompt", (event) => event.preventDefault());
   });
@@ -152,18 +153,35 @@ test("the public entry exposes an installable application shell", async ({ page,
   await expect((await request.get("/icons/app-icon-192.png")).ok()).toBeTruthy();
   await expect((await request.get("/icons/app-icon-512.png")).ok()).toBeTruthy();
 
-  await page.evaluate(() => {
-    const event = new Event("beforeinstallprompt", { cancelable: true });
-    Object.assign(event, {
-      prompt: () => Promise.resolve(),
-      userChoice: Promise.resolve({ outcome: "accepted" }),
-    });
-    window.dispatchEvent(event);
-  });
   const installButton = page.getByRole("button", { name: "Install app" });
-  await expect(installButton).toBeVisible();
+  await expect.poll(async () => {
+    await page.evaluate(() => {
+      const event = new Event("beforeinstallprompt", { cancelable: true });
+      Object.assign(event, {
+        prompt: () => Promise.resolve(),
+        userChoice: Promise.resolve({ outcome: "accepted" }),
+      });
+      window.dispatchEvent(event);
+    });
+    return installButton.count();
+  }).toBe(1);
   await installButton.click();
   await expect(installButton).toBeHidden();
+});
+
+test("a recruiter can explore the complete demo without registering", async ({ page }) => {
+  await page.route("**/api/v1/auth/refresh", (route) => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Explore live demo" }).click();
+
+  await expect(page).toHaveURL(/\/app\/workspace$/);
+  await expect(page.getByText("Demo workspace.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your evidence, ready for different technical directions" })).toBeVisible();
+  await page.getByRole("button", { name: /Applications/ }).click();
+  await expect(page.getByRole("heading", { name: "Your role decisions, in one place" })).toBeVisible();
+  await expect(page.getByText("Junior Data Engineer", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Graduate Cloud Engineer", { exact: true }).first()).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
 });
 
 test("the legacy plan route resolves to the capability profile", async ({ page }) => {

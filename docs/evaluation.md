@@ -13,6 +13,17 @@ CareerSignal keeps deterministic extraction, scoring and retrieval under version
 
 The labelled sets are deliberately small initial baselines, not statistical proof of model quality. Add a case whenever a real beta test exposes a false positive, false negative or misleading ranking. Changes to taxonomy, evidence levels, role decoding or retrieval should not lower an established result without a documented reason.
 
+Run the deterministic labelled-set report with:
+
+```bash
+cd backend
+python -m app.evaluation_report --minimum 1.0
+```
+
+The report emits role and scope accuracy, expected-skill recall, eligibility recall, CV skill recall and evidence-level constraint accuracy as machine-readable JSON. CI requires every current regression metric to remain at `1.0`. These values show consistency on the small committed set, not population-level model accuracy.
+
+Retrieval quality is measured separately by `POST /api/v1/rag/evaluate` against an indexed corpus. It reports Recall@K, mean reciprocal rank and failed case IDs, or `insufficient_data` when no governed postings are indexed. The API deliberately does not manufacture a retrieval score from fixture-free CI data.
+
 ## Live feedback
 
 Users can mark retrieved employer evidence as relevant or not relevant. The product reports only aggregate counts and ranks. Audit and Prometheus events use an allow-list of event names and never include CV text, job-description text or search queries.

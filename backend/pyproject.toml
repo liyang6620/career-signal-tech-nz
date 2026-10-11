@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "career-signal-api"
-version = "0.1.0"
+version = "1.0.0"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16,<2",
@@ -25,13 +25,21 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["httpx>=0.28,<1", "pytest>=8.4,<9", "ruff>=0.13,<1"]
+dev = ["httpx>=0.28,<1", "pytest>=8.4,<9", "pytest-cov>=7,<8", "ruff>=0.13,<1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/worker.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
 
 [tool.ruff]
 line-length = 120

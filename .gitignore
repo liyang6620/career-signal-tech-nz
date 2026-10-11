@@ -6,6 +6,8 @@ __pycache__/
 .pytest-tmp*/
 .ruff_cache/
 .cache/
+.coverage
+coverage/
 *.py[cod]
 frontend/node_modules/
 frontend/dist/

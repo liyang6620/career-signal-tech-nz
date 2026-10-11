@@ -43,19 +43,39 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { API_URL, apiError, apiPayload, fetchWithRecovery, type ServiceState } from "./api/client";
+import { dedupeSkillEvidence, evidenceLabel, evidencePreview, scopeMessage } from "./domain/evidence";
+import {
+  productRoutes,
+  roles,
+  routeTitles,
+  routeViews,
+  type AnalysisDetailsMap,
+  type DecodedRole,
+  type EvidenceResult,
+  type EvidenceRoleFilter,
+  type EvidenceSuggestion,
+  type FitContribution,
+  type GithubCandidate,
+  type GithubProject,
+  type JobAnalysisSummary,
+  type JobStatusEvent,
+  type MarketQuality,
+  type MarketSummary,
+  type ProfileData,
+  type PwaInstallEvent,
+  type RoleFit,
+  type RoleFitMap,
+  type RoleKey,
+  type SavedJob,
+  type SessionUser,
+  type SkillDemand,
+  type SkillEvidence,
+  type Step,
+  type UploadRecord,
+} from "./domain/types";
+import { DEMO_SESSION_KEY, DEMO_TOKEN, demoFetch, demoUser, resetDemoData } from "./demo/demoApi";
 import "./App.css";
-
-type Step = 1 | 2 | 3;
-type RoleKey = "" | "software" | "data-analyst" | "data-engineer" | "ai" | "cloud-devops";
-type PwaInstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
-
-const roles: Record<Exclude<RoleKey, "">, string> = {
-  software: "Software Engineer",
-  "data-analyst": "Data & BI Analyst",
-  "data-engineer": "Data Engineer / Analytics Engineer",
-  ai: "AI Application Engineer",
-  "cloud-devops": "Cloud / DevOps Engineer",
-};
 
 function RoleFamilyIcon({ roleKey, size = 18 }: { roleKey: Exclude<RoleKey, "">; size?: number }) {
   const props = { size, strokeWidth: 1.8, "aria-hidden": true as const };
@@ -77,135 +97,12 @@ function CareerSignalMark({ size = 40 }: { size?: number }) {
   </svg>;
 }
 
-// Docker development maps the API to 8001 by default (see API_HOST_PORT in .env).
-// Deployments can still override this with VITE_API_URL at build time.
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8001";
 const normalizeSourceUrl = (value: string) => value.trim().replace(/\/+$/, "");
 function expandGithubSources(values: string[]) {
   return values.flatMap((value) => value.split(",")).map((value) => {
     try { return decodeURIComponent(value).trim(); } catch { return value.trim(); }
   }).filter(Boolean);
 }
-function apiError(payload: unknown, fallback: string) {
-  if (!payload || typeof payload !== "object" || !("detail" in payload)) return fallback;
-  const detail = (payload as { detail?: unknown }).detail;
-  if (typeof detail === "string") return detail;
-  if (Array.isArray(detail)) return detail.map((item) => typeof item === "object" && item && "msg" in item ? String(item.msg) : String(item)).join("; ");
-  return fallback;
-}
-async function apiPayload(response: Response): Promise<unknown> {
-  const body = await response.text();
-  if (!body) return null;
-  try { return JSON.parse(body); } catch { return { detail: response.ok ? undefined : body }; }
-}
-type SessionUser = { id: string; email: string; display_name: string; is_verified: boolean };
-type EvidenceSuggestion = { id: string; canonical_skill: string; category: string; excerpt: string; locator: string; confidence: number; proposed_level: number; review_status: string };
-type GithubProject = { id: string; canonical_url?: string; repository: string; status: string; suggestions: EvidenceSuggestion[] };
-type GithubCandidate = { name: string; url: string; description: string | null; language: string | null; stars: number; updated_at: string | null };
-type FitContribution = { skill_slug: string; skill_name: string; weight: number; required: boolean; evidence_level: number; evidence_confidence: number; source_count: number; source_type_count: number; base_score: number; confidence_adjustment: number; specificity_bonus: number; verification_bonus: number; outcome_bonus: number; corroboration_bonus: number; diversity_bonus: number; score_factors: string[]; normalized_score: number; weighted_score: number; market_frequency: number; market_mention_count: number };
-type RoleFit = { role_family: string; score: number; coverage: number; evidence_depth: number; cap_applied: boolean; contributions: FitContribution[]; benchmark_sources?: { name: string; url: string }[]; benchmark_methodology?: string; market_posting_count?: number };
-type RoleFitMap = Partial<Record<Exclude<RoleKey, "">, RoleFit>>;
-type SkillEvidence = { skill_slug: string; skill_name: string; category: string; evidence_level: number; confidence: number; excerpt: string; locator: string; source_type: string };
-type ProfileData = { id: string; location: string; seniority: string; role_family: Exclude<RoleKey, "">; evidence_sources: { id: string; source_type: string; source_reference: string; processing_status: string }[]; updated_at: string };
-type UploadRecord = { id: string; original_filename: string; status: string; failure_reason?: string | null; cv_label?: string | null; target_role?: string | null; created_at: string };
-type SkillDemand = { slug: string; name: string; required: boolean; importance: "essential" | "named" | "supporting"; role_families: string[]; mention_count: number; demand_score: number; explicit_mention: number; repetition_signal: number; requirement_signal: number; title_signal: number; evidence_level: number; evidence_score: number; evidence_confidence: number; source_count: number; source_type_count: number; evidence_base_score: number; confidence_adjustment: number; specificity_bonus?: number; verification_bonus?: number; outcome_bonus?: number; corroboration_bonus: number; diversity_bonus: number; score_factors?: string[] };
-type RoleMatch = { role_family: Exclude<RoleKey, "">; role_label: string; match_score: number };
-type EligibilityRequirement = { category: string; label: string; importance: "required" | "stated" | "preferred"; excerpt: string };
-type DecodedRole = { analysis_id?: string | null; role_family: Exclude<RoleKey, "">; role_label: string; confidence: number; seniority: string; scope_status: "matched" | "mixed" | "adjacent" | "out_of_scope"; taxonomy_coverage: number; matched_skills: { slug: string; name: string; mention_count: number }[]; skill_demands: SkillDemand[]; role_matches: RoleMatch[]; unmapped_skills: string[]; eligibility_requirements: EligibilityRequirement[] };
-type ProductView = "workspace" | "market" | "decoder" | "evidence" | "path" | "graph" | "route" | "jobs" | "settings";
-type EvidenceResult = { citation_id: string; title: string; company: string; location: string; source_url: string; published_at: string | null; excerpt: string; retrieval_score: number };
-type JobStatusEvent = { id: string; from_status: SavedJob["status"] | null; to_status: SavedJob["status"]; changed_at: string };
-type MarketSummary = {
-  posting_count: number;
-  source_count: number;
-  latest_retrieved_at: string | null;
-  roles: { role_family: string; count: number }[];
-  seniority: { seniority: string; count: number }[];
-  role_seniority: { role_family: string; seniority: string; count: number }[];
-  top_skills: { skill_slug: string; skill_name: string; count: number }[];
-  role_skills: { role_family: string; skill_slug: string; skill_name: string; count: number }[];
-  locations: { location: string; count: number }[];
-  role_locations: { role_family: string; location: string; count: number }[];
-};
-type MarketQuality = { posting_count: number; active_source_count: number; latest_retrieved_at: string | null; graduate_junior_count: number; normalised_location_count: number; missing_publication_date_percent: number; low_confidence_count: number; stale_posting_count: number; collector_completed_count: number; collector_failed_count: number; sample_warnings: string[]; sources: { name: string; adapter: string; enabled: boolean; latest_status: string | null; last_run_at: string | null; next_run_at: string | null; refresh_interval_minutes: number; accepted_count: number; rejected_count: number }[] };
-type SavedJob = { id: string; analysis_id: string | null; source_url: string; title: string; company: string; location: string; role_family: string | null; description: string | null; status: "saved" | "preparing" | "applied" | "interview" | "offer" | "rejected" | "archived"; notes: string | null; evidenced_skill_count: number; skill_count: number; top_gaps: string[]; comparison_facts: { label: string; value: string; source: string }[]; comparison_warning: string | null; created_at: string; updated_at: string };
-type JobAnalysisSummary = { id: string; title: string; role_family: string; scope_status: string; confidence: number; created_at: string };
-type AnalysisDetailsMap = Record<string, DecodedRole | null>;
-
-const productRoutes: Record<ProductView, string> = {
-  workspace: "/app/workspace",
-  market: "/app/market",
-  decoder: "/app/roles/decode",
-  evidence: "/app/evidence",
-  path: "/app/pathways",
-  graph: "/app/profile",
-  route: "/app/plan",
-  jobs: "/app/jobs",
-  settings: "/app/settings",
-};
-const routeViews = Object.fromEntries(Object.entries(productRoutes).map(([view, path]) => [path, view])) as Record<string, ProductView>;
-const routeTitles: Record<ProductView, string> = {
-  workspace: "Workspace",
-  market: "Market intelligence",
-  decoder: "Role intelligence",
-  evidence: "Evidence intelligence",
-  path: "Career planning",
-  graph: "Capability profile",
-  route: "Capability profile",
-  jobs: "Application tracker",
-  settings: "Account settings",
-};
-
-const evidenceLabels = ["Not evidenced", "Claimed", "Used", "Implemented", "Verified", "Professional"];
-const evidenceLabel = (level: number) => evidenceLabels[Math.max(0, Math.min(5, Math.round(level)))] ?? evidenceLabels[0];
-const scopeMessage = (status: DecodedRole["scope_status"]) => {
-  if (status === "mixed") return "This advertisement spans multiple technical disciplines. The analysis therefore compares the closest relevant role families.";
-  if (status === "out_of_scope") return "This role does not appear to be a technology position within the fields currently covered by CareerSignal.";
-  if (status === "adjacent") return "This position partially aligns with the closest role family. The analysis below prioritises the requirements stated in the advertisement.";
-  return "Some requirements are not yet represented in CareerSignal's role-family framework. They remain visible below as advertisement-specific capabilities.";
-};
-const evidencePreview = (value: string) => {
-  const compact = value.replace(/\s+/g, " ").trim();
-  return compact.length > 260 ? `${compact.slice(0, 257)}…` : compact;
-};
-
-// Evidence can arrive from more than one source. Keep one capability row and
-// retain the strongest signal plus a compact list of supporting sources.
-function dedupeSkillEvidence(items: SkillEvidence[]): SkillEvidence[] {
-  const merged = new Map<string, SkillEvidence>();
-  for (const item of items) {
-    const key = (item.skill_slug || item.skill_name).trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const current = merged.get(key);
-    if (!current) {
-      merged.set(key, { ...item });
-      continue;
-    }
-    const currentStrength = [current.evidence_level, current.confidence];
-    const nextStrength = [item.evidence_level, item.confidence];
-    const representative = nextStrength[0] > currentStrength[0]
-      || (nextStrength[0] === currentStrength[0] && nextStrength[1] > currentStrength[1])
-      ? item
-      : current;
-    const sources = new Set(
-      `${current.source_type} + ${item.source_type}`
-        .split("+")
-        .map((source) => source.trim())
-        .filter(Boolean),
-    );
-    merged.set(key, {
-      ...representative,
-      evidence_level: Math.max(current.evidence_level, item.evidence_level),
-      confidence: Math.max(current.confidence, item.confidence),
-      source_type: [...sources].sort().join(" + "),
-    });
-  }
-  return [...merged.values()].sort((left, right) => (
-    right.evidence_level - left.evidence_level
-    || right.confidence - left.confidence
-    || left.skill_name.localeCompare(right.skill_name)
-  ));
-}
-
 function PersonalEvidenceGraph({ evidence }: { evidence: SkillEvidence[] }) {
   const uniqueEvidence = dedupeSkillEvidence(evidence);
   const chartItems = [...uniqueEvidence].sort((left, right) => right.evidence_level - left.evidence_level || right.confidence - left.confidence).slice(0, 8);
@@ -329,8 +226,8 @@ function MarketView({ market, quality, targetRole, navigate }: { market: MarketS
       <div className="market-toolbar"><div><span>Role family</span><strong>{roles[focus]}</strong><small>{targetRole ? `${roles[targetRole]} is selected in your profile.` : "Choose a segment to inspect."}</small></div><div className="market-role-selector" role="group" aria-label="Market role family">{Object.entries(roles).map(([key, label]) => <button type="button" key={key} aria-pressed={focus === key} className={focus === key ? "active" : ""} onClick={() => setFocus(key as Exclude<RoleKey, "">)}>{label}{targetRole === key && <small>Target</small>}</button>)}</div></div>
       <div className="market-summary" aria-label="Selected market summary"><div><span className="metric-icon"><BriefcaseBusiness size={18} /></span><span>Indexed opportunities</span><strong>{focusCount}</strong><small>in this role family</small></div><div><span className="metric-icon"><CircleGauge size={18} /></span><span>Share of current sample</span><strong>{marketShare}%</strong><small>{focusCount} of {market.posting_count} records</small></div><div><span className="metric-icon"><GraduationCap size={18} /></span><span>Graduate and junior</span><strong>{earlyCareerCount}</strong><small>explicitly classified openings</small></div><div><span className="metric-icon"><Database size={18} /></span><span>Source coverage</span><strong>{market.source_count}</strong><small>permitted source{market.source_count === 1 ? "" : "s"}</small></div></div>
       <div className="market-insights">
-        <section className="market-data-block"><header><div className="data-block-title"><span className="section-icon"><Layers3 size={18} /></span><div><span className="panel-kicker">Employer demand</span><h2>Skills employers mention</h2></div></div><button className="text-button" onClick={() => navigate(productRoutes.evidence)}>Open evidence <ArrowRight size={14} /></button></header><p className="data-block-note">Ranked by frequency in the currently indexed {roles[focus]} sample.</p><div className="market-table" role="table" aria-label="Employer skills"><div className="market-table-head" role="row"><span>Skill</span><span>Records</span><span>Share</span></div>{displayedSkills.map((item, index) => <div className="market-table-row" role="row" key={item.skill_slug}><span><b>{String(index + 1).padStart(2, "0")}</b>{item.skill_name}</span><strong>{item.count}</strong><span><i><u style={{ width: `${Math.max((item.count / skillMax) * 100, 4)}%` }} /></i>{Math.round((item.count / Math.max(focusCount, 1)) * 100)}%</span></div>)}</div></section>
-        <section className="market-data-block"><header><div><span className="panel-kicker">Geography</span><h2>Where opportunities appear</h2></div><MapPin size={18} /></header><p className="data-block-note">Normalised from each source's location text. Remote and hybrid labels may vary.</p><div className="market-table" role="table" aria-label="Opportunity locations"><div className="market-table-head" role="row"><span>Location</span><span>Records</span><span>Share</span></div>{displayedLocations.map((item) => <div className="market-table-row" role="row" key={item.location}><span><MapPin size={14} />{item.location}</span><strong>{item.count}</strong><span><i><u style={{ width: `${Math.max((item.count / locationMax) * 100, 4)}%` }} /></i>{Math.round((item.count / Math.max(focusCount, 1)) * 100)}%</span></div>)}</div></section>
+        <section className="market-data-block"><header><div className="data-block-title"><span className="section-icon"><Layers3 size={18} /></span><div><span className="panel-kicker">Employer demand</span><h2>Skills employers mention</h2></div></div><button className="text-button" onClick={() => navigate(productRoutes.evidence)}>Open evidence <ArrowRight size={14} /></button></header><p className="data-block-note">Ranked by frequency in the currently indexed {roles[focus]} sample.</p><div className="market-table" aria-label="Employer skills"><div className="market-table-head"><span>Skill</span><span>Records</span><span>Share</span></div>{displayedSkills.map((item, index) => <div className="market-table-row" key={item.skill_slug}><span><b>{String(index + 1).padStart(2, "0")}</b>{item.skill_name}</span><strong>{item.count}</strong><span><i><u style={{ width: `${Math.max((item.count / skillMax) * 100, 4)}%` }} /></i>{Math.round((item.count / Math.max(focusCount, 1)) * 100)}%</span></div>)}</div></section>
+        <section className="market-data-block"><header><div><span className="panel-kicker">Geography</span><h2>Where opportunities appear</h2></div><MapPin size={18} /></header><p className="data-block-note">Normalised from each source's location text. Remote and hybrid labels may vary.</p><div className="market-table" aria-label="Opportunity locations"><div className="market-table-head"><span>Location</span><span>Records</span><span>Share</span></div>{displayedLocations.map((item) => <div className="market-table-row" key={item.location}><span><MapPin size={14} />{item.location}</span><strong>{item.count}</strong><span><i><u style={{ width: `${Math.max((item.count / locationMax) * 100, 4)}%` }} /></i>{Math.round((item.count / Math.max(focusCount, 1)) * 100)}%</span></div>)}</div></section>
       </div>
       <section className="market-next-step"><span className="next-step-icon"><Compass size={21} /></span><div><span className="panel-kicker">Next step</span><h2>Move from market signal to a real application decision</h2><p>Use the same role family and evidence baseline to compare a specific job advertisement or inspect your current gaps.</p></div><div><button className="primary-button" onClick={() => navigate(productRoutes.decoder)}>Compare a job <ArrowRight size={15} /></button><button className="secondary-button" onClick={() => navigate(productRoutes.graph)}>Review capability gaps</button></div></section>
       {alternatives.length > 0 && <section className="market-adjacent"><header><div><span className="panel-kicker">Adjacent demand</span><h2>Related role families</h2></div><span>Ordered by career proximity</span></header><div>{alternatives.map((item) => <button type="button" key={item.roleKey} onClick={() => setFocus(item.roleKey)}><span><strong>{roles[item.roleKey]}</strong><small>Inspect this segment</small></span><b>{item.count}<small>records</small></b><ArrowRight size={16} /></button>)}</div></section>}
@@ -364,8 +261,6 @@ function CareerPathView({ role, market, roleFits, navigate, onSelectRole }: { ro
     </section>
   </div>;
 }
-
-type EvidenceRoleFilter = "all" | Exclude<RoleKey, "">;
 
 function CapabilityProfileView({ role, evidence, roleFits, roleFitsLoading, roleFitsError, onRetryRoleFits, selectedRole, onSelectRole, evidenceFilter, onSelectEvidenceFilter, navigate }: { role: RoleKey; evidence: SkillEvidence[]; roleFits: RoleFitMap; roleFitsLoading: boolean; roleFitsError: boolean; onRetryRoleFits: () => void; selectedRole: Exclude<RoleKey, ""> | ""; onSelectRole: (roleKey: Exclude<RoleKey, "">) => void; evidenceFilter: EvidenceRoleFilter; onSelectEvidenceFilter: (filter: EvidenceRoleFilter) => void; navigate: (path: string) => void }) {
   const uniqueEvidence = dedupeSkillEvidence(evidence);
@@ -417,7 +312,7 @@ function SavedJobDecisionFactors({ jobs }: { jobs: SavedJob[] }) {
   const valueFor = (job: SavedJob, label: string) => job.comparison_facts?.find((fact) => fact.label === label)?.value ?? "Not stated";
   return <section className="jobs-decision-factors" aria-labelledby="jobs-decision-factors-title">
     <header><div><span className="panel-kicker">Decision summary</span><h2 id="jobs-decision-factors-title">Choose on the differences that matter</h2><p>These values are extracted from each saved advertisement. “Not stated” means the source did not provide a reliable signal.</p></div></header>
-    <div className="jobs-decision-table" role="table" aria-label="Saved role decision summary"><div className="jobs-decision-row jobs-decision-head" role="row"><strong>Decision factor</strong>{jobs.map((job) => <span key={job.id}>{job.company} · {job.title}</span>)}</div>{labels.map((label) => <div className="jobs-decision-row" role="row" key={label}><strong>{label}</strong>{jobs.map((job) => <span key={job.id}>{valueFor(job, label)}</span>)}</div>)}</div>
+    <div className="jobs-decision-table" aria-label="Saved role decision summary"><div className="jobs-decision-row jobs-decision-head"><strong>Decision factor</strong>{jobs.map((job) => <span key={job.id}>{job.company} · {job.title}</span>)}</div>{labels.map((label) => <div className="jobs-decision-row" key={label}><strong>{label}</strong>{jobs.map((job) => <span key={job.id}>{valueFor(job, label)}</span>)}</div>)}</div>
     {jobs.some((job) => job.comparison_warning) && <p className="jobs-comparison-warning">Technical requirements were not named clearly in one or more saved adverts. The benchmark below is a transparent role-family reference, not a claim about that employer’s exact stack.</p>}
   </section>;
 }
@@ -440,9 +335,9 @@ function JobsView({ jobs, loading, history, historyJobId, historyLoading, compar
     {compareMode && (comparisonJobs.length >= 2 ? <SavedRoleComparison jobs={comparisonJobs} details={comparisonDetails} loading={comparisonDetailsLoading} failed={comparisonDetailsError} onToggleCompare={onToggleCompare} /> : <section className="jobs-compare-panel" aria-labelledby="jobs-compare-title"><header><div><span className="panel-kicker">Role comparison</span><h2 id="jobs-compare-title">Compare saved analyses</h2><p>Select up to three saved roles below. The comparison stays here once two roles are selected.</p></div><span className="jobs-compare-count">{comparisonJobs.length} selected</span></header><div className="jobs-compare-empty"><Layers3 size={19} /><span>{comparisonJobs.length ? "Select one more saved role to compare." : "Select two or three saved roles from the list below."}</span></div></section>)}
     <section className="jobs-register">
       <header><div><span className="panel-kicker">Saved decisions</span><h2>Application pipeline</h2></div><small>{jobs.length} role{jobs.length === 1 ? "" : "s"}</small></header>
-      {loading ? <div className="jobs-empty"><RefreshCw size={22} className="spin" /><h3>Loading your applications</h3></div> : jobs.length ? <div className="jobs-table" role="table" aria-label="Saved job applications">
-         <div className="jobs-table-head" role="row"><span>Opportunity</span><span>Evidence readiness</span><span>Stage</span><span>Actions</span></div>
-        {jobs.map((job) => <article className="jobs-row" role="row" key={job.id}>
+      {loading ? <div className="jobs-empty"><RefreshCw size={22} className="spin" /><h3>Loading your applications</h3></div> : jobs.length ? <div className="jobs-table" aria-label="Saved job applications">
+         <div className="jobs-table-head"><span>Opportunity</span><span>Evidence readiness</span><span>Stage</span><span>Actions</span></div>
+        {jobs.map((job) => <article className="jobs-row" key={job.id}>
           <div>{compareMode && <label className="job-compare-toggle"><input type="checkbox" checked={comparisonJobIds.includes(job.id)} onChange={() => onToggleCompare(job)} disabled={!comparisonJobIds.includes(job.id) && comparisonJobIds.length >= 3} /><span>Compare</span></label>}<a href={job.analysis_id ? productRoutes.decoder : job.source_url} target={job.analysis_id ? undefined : "_blank"} rel={job.analysis_id ? undefined : "noreferrer"} onClick={job.analysis_id ? (event) => { event.preventDefault(); onOpenAnalysis(job); } : undefined}>{job.title}</a><span>{job.company} · {job.analysis_id ? "Saved analysis" : job.location}</span><small>{job.analysis_id ? job.location : ""}</small>{job.notes && <small className="job-note-preview"><FileText size={12} />{job.notes}</small>}</div>
           <div className="job-readiness">{job.skill_count > 0 ? <><strong>{job.evidenced_skill_count} / {job.skill_count}</strong><span>capabilities evidenced</span>{job.top_gaps.length > 0 && <small>Next: {job.top_gaps.slice(0, 2).join(", ")}</small>}</> : <><strong>Review needed</strong><span>Compare the full advertisement</span></>}</div>
           <label><span className="sr-only">Application status for {job.title}</span><select value={job.status} onChange={(event) => onStatus(job, event.target.value as SavedJob["status"])}>{applicationStages.map((stage) => <option key={stage} value={stage}>{applicationStageLabels[stage]}</option>)}</select></label>
@@ -482,7 +377,7 @@ function AccountSettingsView({ user, onExport, onDelete }: { user: SessionUser; 
   </div>;
 }
 
-function AuthScreen({ onAuthenticated, initialMode = "register", onBack, onRoute }: { onAuthenticated: (token: string, user: SessionUser) => void; initialMode?: "login" | "register" | "reset"; onBack?: () => void; onRoute: (path: string) => void }) {
+function AuthScreen({ onAuthenticated, initialMode = "register", onBack, onRoute, serviceState, onServiceState }: { onAuthenticated: (token: string, user: SessionUser) => void; initialMode?: "login" | "register" | "reset"; onBack?: () => void; onRoute: (path: string) => void; serviceState: ServiceState; onServiceState: (state: ServiceState) => void }) {
   const search = new URLSearchParams(window.location.search);
   const resetToken = window.location.pathname === "/reset-password" ? search.get("token") : search.get("reset");
   const verifyToken = window.location.pathname === "/verify-email" ? search.get("token") : search.get("verify");
@@ -496,14 +391,14 @@ function AuthScreen({ onAuthenticated, initialMode = "register", onBack, onRoute
 
   useEffect(() => {
     if (!verifyToken) return;
-    fetch(`${API_URL}/api/v1/auth/verify-email`, {
+    fetchWithRecovery(`${API_URL}/api/v1/auth/verify-email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: verifyToken }),
-    }).then((response) => {
+    }, onServiceState).then((response) => {
       setMessage(response.ok ? "Email verified. You can now sign in." : "This verification link is invalid or expired.");
     }).catch(() => setMessage("Could not verify this email link."));
-  }, [verifyToken]);
+  }, [onServiceState, verifyToken]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -512,23 +407,23 @@ function AuthScreen({ onAuthenticated, initialMode = "register", onBack, onRoute
     setMessage("");
     try {
       if (mode === "forgot") {
-        const response = await fetch(`${API_URL}/api/v1/auth/forgot-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+        const response = await fetchWithRecovery(`${API_URL}/api/v1/auth/forgot-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }, onServiceState);
         if (!response.ok) throw new Error("Could not request a reset link");
         setMessage("If that account exists, a reset link has been sent.");
         return;
       }
       if (mode === "reset") {
-        const response = await fetch(`${API_URL}/api/v1/auth/reset-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: resetToken, password }) });
+        const response = await fetchWithRecovery(`${API_URL}/api/v1/auth/reset-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: resetToken, password }) }, onServiceState);
         if (!response.ok) throw new Error("This reset link is invalid or expired");
         onRoute("/login?password=updated");
         return;
       }
-      const response = await fetch(`${API_URL}/api/v1/auth/${mode}`, {
+      const response = await fetchWithRecovery(`${API_URL}/api/v1/auth/${mode}`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(mode === "register" ? { display_name: name, email, password } : { email, password }),
-      });
+      }, onServiceState);
       const data = await response.json();
       if (!response.ok) throw new Error(apiError(data, "Authentication failed"));
       onAuthenticated(data.access_token, data.user);
@@ -541,10 +436,10 @@ function AuthScreen({ onAuthenticated, initialMode = "register", onBack, onRoute
 
   const title = mode === "register" ? "Create your career workspace" : mode === "login" ? "Welcome back" : mode === "forgot" ? "Reset your password" : "Choose a new password";
   const description = mode === "register" ? "Build an evidence-based profile for the New Zealand technology market." : mode === "login" ? "Sign in to continue your market and evidence analysis." : mode === "forgot" ? "Enter your account email and we will send a reset link." : "Your new password must contain at least 12 characters.";
-  return <div className="auth-page"><div className="auth-brand"><span className="auth-brand-mark"><CareerSignalMark size={30} /></span><strong>CareerSignal</strong>{onBack && <button className="auth-back" onClick={onBack}>Back to product overview</button>}</div><section className="auth-panel"><p className="auth-kicker">CareerSignal Tech NZ</p><h1>{title}</h1><p>{description}</p><form onSubmit={submit}>{mode === "register" && <label className="field"><span>Name</span><input required value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>}{mode !== "reset" && <label className="field"><span>Email</span><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>}{mode !== "forgot" && <label className="field"><span>Password</span><input required minLength={mode === "login" ? 1 : 12} type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>}{(mode === "register" || mode === "reset") && <small>Use at least 12 characters.</small>}{mode === "login" && <button type="button" className="forgot-link" onClick={() => setMode("forgot")}>Forgot password?</button>}{message && <p className="success-message">{message}</p>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button auth-submit" disabled={submitting}>{submitting ? "Please wait..." : mode === "register" ? "Create account" : mode === "login" ? "Sign in" : mode === "forgot" ? "Send reset link" : "Update password"}<ArrowRight size={15} /></button></form><div className="auth-switch">{mode === "register" ? "Already have an account?" : mode === "login" ? "New to CareerSignal?" : "Return to sign in"}<button onClick={() => { if (mode === "forgot" || mode === "reset") { setMode("login"); } else { onRoute(mode === "register" ? "/login" : "/register"); } setError(""); setMessage(""); }}>{mode === "register" ? "Sign in" : mode === "login" ? "Create account" : "Sign in"}</button></div></section><p className="auth-note"><ShieldCheck size={14} />Your private evidence is never published as market data.</p></div>;
+  return <div className="auth-page"><div className="auth-brand"><span className="auth-brand-mark"><CareerSignalMark size={30} /></span><strong>CareerSignal</strong>{onBack && <button className="auth-back" onClick={onBack}>Back to product overview</button>}</div><section className="auth-panel"><p className="auth-kicker">CareerSignal Tech NZ</p><h1>{title}</h1><p>{description}</p><form onSubmit={submit}>{mode === "register" && <label className="field"><span>Name</span><input required value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>}{mode !== "reset" && <label className="field"><span>Email</span><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" /></label>}{mode !== "forgot" && <label className="field"><span>Password</span><input required minLength={mode === "login" ? 1 : 12} type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>}{(mode === "register" || mode === "reset") && <small>Use at least 12 characters.</small>}{mode === "login" && <button type="button" className="forgot-link" onClick={() => setMode("forgot")}>Forgot password?</button>}{serviceState === "waking" && <p className="service-message" role="status">The secure service is waking up. Your request will continue automatically.</p>}{serviceState === "unavailable" && <p className="form-error" role="alert">The secure service is not responding. Please retry in a moment.</p>}{message && <p className="success-message">{message}</p>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button auth-submit" disabled={submitting}>{submitting ? serviceState === "waking" ? "Waking secure service..." : "Connecting securely..." : mode === "register" ? "Create account" : mode === "login" ? "Sign in" : mode === "forgot" ? "Send reset link" : "Update password"}<ArrowRight size={15} /></button></form><div className="auth-switch">{mode === "register" ? "Already have an account?" : mode === "login" ? "New to CareerSignal?" : "Return to sign in"}<button onClick={() => { if (mode === "forgot" || mode === "reset") { setMode("login"); } else { onRoute(mode === "register" ? "/login" : "/register"); } setError(""); setMessage(""); }}>{mode === "register" ? "Sign in" : mode === "login" ? "Create account" : "Sign in"}</button></div></section><p className="auth-note"><ShieldCheck size={14} />Your private evidence is never published as market data.</p></div>;
 }
 
-function WelcomeScreen({ onChoose }: { onChoose: (mode: "login" | "register") => void }) {
+function WelcomeScreen({ onChoose, onDemo }: { onChoose: (mode: "login" | "register") => void; onDemo: () => void }) {
   const [installPrompt, setInstallPrompt] = useState<PwaInstallEvent | null>(null);
   useEffect(() => {
     const capturePrompt = (event: Event) => {
@@ -581,6 +476,7 @@ function WelcomeScreen({ onChoose }: { onChoose: (mode: "login" | "register") =>
           <p className="welcome-lede"><strong>Make career decisions from evidence, not job-title guesswork.</strong> Compare your demonstrated experience with current roles, skills and hiring signals across New Zealand.</p>
           <div className="welcome-actions">
             <button className="primary-button" onClick={() => onChoose("register")}>Create a career profile <ArrowRight size={15} /></button>
+            <button className="welcome-demo" onClick={onDemo}><Compass size={16} />Explore live demo</button>
             <button className="welcome-secondary" onClick={() => onChoose("login")}>Sign in to your profile</button>
             {installPrompt && <button className="welcome-install" onClick={installApp}><Download size={16} />Install app</button>}
           </div>
@@ -708,10 +604,14 @@ export default function App() {
   const [loadingJobHistory, setLoadingJobHistory] = useState(false);
   const [analysisHistory, setAnalysisHistory] = useState<JobAnalysisSummary[]>([]);
   const [profileEvidenceFilter, setProfileEvidenceFilter] = useState<EvidenceRoleFilter>("all");
+  const [serviceState, setServiceState] = useState<ServiceState>("ready");
+  const isDemo = token === DEMO_TOKEN;
 
   const authenticatedFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const response = await fetch(input, init);
-    if (response.status === 401 && token) {
+    const response = token === DEMO_TOKEN
+      ? await demoFetch(input, init)
+      : await fetchWithRecovery(input, init, setServiceState);
+    if (response.status === 401 && token && token !== DEMO_TOKEN) {
       const returnTo = `${routerLocation.pathname}${routerLocation.search}`;
       setToken(null);
       setUser(null);
@@ -736,9 +636,19 @@ export default function App() {
   }, [routerLocation.pathname, view]);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
+    if (window.sessionStorage.getItem(DEMO_SESSION_KEY) === "active") {
+      setToken(DEMO_TOKEN);
+      setUser(demoUser);
+      setCheckingSession(false);
+      return;
+    }
+    fetchWithRecovery(`${API_URL}/api/v1/auth/refresh`, { method: "POST", credentials: "include" }, setServiceState)
       .then(async (response) => response.ok ? response.json() : Promise.reject())
-      .then((data) => { setToken(data.access_token); setUser(data.user); })
+      .then((data) => {
+        if (window.sessionStorage.getItem(DEMO_SESSION_KEY) === "active") return;
+        setToken(data.access_token);
+        setUser(data.user);
+      })
       .catch(() => undefined)
       .finally(() => setCheckingSession(false));
   }, []);
@@ -1083,7 +993,12 @@ export default function App() {
   }
 
   async function logout() {
-    await fetch(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" });
+    if (token === DEMO_TOKEN) {
+      window.sessionStorage.removeItem(DEMO_SESSION_KEY);
+      resetDemoData();
+    } else {
+      await fetchWithRecovery(`${API_URL}/api/v1/auth/logout`, { method: "POST", credentials: "include" }, setServiceState).catch(() => undefined);
+    }
     setToken(null);
     setUser(null);
     setStep(1);
@@ -1345,6 +1260,7 @@ export default function App() {
 
   async function deleteAccount(password: string) {
     if (!token) return;
+    if (isDemo) throw new Error("Account deletion is disabled in the demo workspace.");
     const response = await authenticatedFetch(`${API_URL}/api/v1/account`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -1358,13 +1274,20 @@ export default function App() {
     navigate("/", { replace: true });
   }
 
-  if (checkingSession || (token && user?.is_verified && loadingProfile)) return <div className="session-loading"><span>CS</span><div><i /><i /><i /></div></div>;
+  if ((checkingSession && routerLocation.pathname.startsWith("/app")) || (token && user?.is_verified && loadingProfile)) return <div className="session-loading"><span>CS</span><div><i /><i /><i /></div>{serviceState === "waking" && <p>Secure service is waking up. This can take a few seconds.</p>}</div>;
   if (!token || !user) {
     if (routerLocation.pathname.startsWith("/app")) return <Navigate to={`/login?returnTo=${encodeURIComponent(`${routerLocation.pathname}${routerLocation.search}`)}`} replace />;
-    if (routerLocation.pathname === "/") return <WelcomeScreen onChoose={(mode) => navigate(`/${mode}`)} />;
+    if (routerLocation.pathname === "/") return <WelcomeScreen onChoose={(mode) => navigate(`/${mode}`)} onDemo={() => {
+      resetDemoData();
+      window.sessionStorage.setItem(DEMO_SESSION_KEY, "active");
+      setToken(DEMO_TOKEN);
+      setUser(demoUser);
+      setLoadingProfile(true);
+      navigate(productRoutes.workspace, { replace: true });
+    }} />;
     if (["/login", "/register", "/reset-password", "/verify-email"].includes(routerLocation.pathname)) {
       const initialMode = routerLocation.pathname === "/register" ? "register" : routerLocation.pathname === "/reset-password" ? "reset" : "login";
-      return <AuthScreen key={`${routerLocation.pathname}${routerLocation.search}`} initialMode={initialMode} onBack={() => navigate("/")} onRoute={(path) => navigate(path)} onAuthenticated={(accessToken, sessionUser) => {
+      return <AuthScreen key={`${routerLocation.pathname}${routerLocation.search}`} initialMode={initialMode} onBack={() => navigate("/")} onRoute={(path) => navigate(path)} serviceState={serviceState} onServiceState={setServiceState} onAuthenticated={(accessToken, sessionUser) => {
         setToken(accessToken);
         setUser(sessionUser);
         const returnTo = new URLSearchParams(routerLocation.search).get("returnTo");
@@ -1477,6 +1400,8 @@ export default function App() {
       </aside>
 
       <main id="main-content" tabIndex={-1}>
+        {isDemo && <div className="demo-banner" role="status"><Compass size={15} /><span><strong>Demo workspace.</strong> Explore every feature; changes reset when you leave.</span></div>}
+        {serviceState !== "ready" && !isDemo && <div className={`service-banner ${serviceState}`} role="status"><RefreshCw size={15} className={serviceState === "waking" ? "spin" : undefined} /><span>{serviceState === "waking" ? "Secure service is waking up. This can take a few seconds." : "The secure service is not responding. Your saved data has not changed."}</span>{serviceState === "unavailable" && <button type="button" onClick={() => window.location.reload()}>Retry</button>}</div>}
         <header className="topbar">
           <div className="mobile-brand"><CareerSignalMark size={34} /></div>
           <div className="topbar-context"><span className="topbar-section">CAREERSIGNAL</span><span className="topbar-separator">/</span><strong>{routeTitles[view]}</strong></div>
@@ -1533,11 +1458,11 @@ export default function App() {
             {personalEvidence.length ? <section className="workspace-snapshot"><div className="snapshot-heading"><span className="panel-kicker">Evidence snapshot</span><h2>{personalEvidence.length} capabilities are ready for review</h2><p>Workspace keeps the operational record concise. Open Profile for the network, maturity analysis, source triangulation and role-family comparisons.</p></div><div className="snapshot-metrics"><div><strong>{personalEvidence.filter((item) => item.evidence_level >= 3).length}</strong><span>implemented or verified</span></div><div><strong>{new Set(personalEvidence.map((item) => item.source_type)).size}</strong><span>evidence source types</span></div><div><strong>{new Set(personalEvidence.map((item) => item.category)).size}</strong><span>capability domains</span></div></div><button className="primary-button" onClick={() => navigate(productRoutes.graph)}><Network size={15} />Open capability report <ArrowRight size={14} /></button></section> : <section className="brief-loading"><FileText size={20} /><div><h2>Build your personal evidence record</h2><p>Confirm CV or GitHub evidence to make the full capability report available.</p></div><button className="secondary-button" onClick={() => { setEditingProfile(true); setStep(2); }}>Manage evidence</button></section>}
             <section className="evidence-register">
               <div className="register-heading"><div><span>Evidence register</span><h2>Sources used in this brief</h2></div><button className="text-button" onClick={() => { setEditingProfile(true); setStep(2); }}>Update sources <ArrowRight size={14} /></button></div>
-              <div className="register-table" role="table" aria-label="Evidence sources">
-                <div className="register-row register-labels" role="row"><span>Source</span><span>Record</span><span>Status</span></div>
-                <div className="register-row" role="row"><span><FileText size={16} />CV or resume</span><strong>{cvFilename || "No CV added"}</strong><small className={cvUploadId ? "source-ready" : "source-empty"}>{cvUploadId ? cvStatus.replaceAll("_", " ") : "Not connected"}</small></div>
-                <div className="register-row" role="row"><span><GitBranch size={16} />GitHub</span><strong>{githubProjects.length ? `${githubProjects.length} reviewed repositor${githubProjects.length === 1 ? "y" : "ies"}` : github ? "Profile connected" : "No profile added"}</strong><small className={github ? "source-ready" : "source-empty"}>{github ? "Public evidence" : "Not connected"}</small></div>
-                <div className="register-row" role="row"><span><Link2 size={16} />Portfolio</span><strong>{portfolio || "No portfolio link"}</strong><small className={portfolio ? "source-ready" : "source-empty"}>{portfolio ? "Public evidence" : "Optional"}</small></div>
+              <div className="register-table" aria-label="Evidence sources">
+                <div className="register-row register-labels"><span>Source</span><span>Record</span><span>Status</span></div>
+                <div className="register-row"><span><FileText size={16} />CV or resume</span><strong>{cvFilename || "No CV added"}</strong><small className={cvUploadId ? "source-ready" : "source-empty"}>{cvUploadId ? cvStatus.replaceAll("_", " ") : "Not connected"}</small></div>
+                <div className="register-row"><span><GitBranch size={16} />GitHub</span><strong>{githubProjects.length ? `${githubProjects.length} reviewed repositor${githubProjects.length === 1 ? "y" : "ies"}` : github ? "Profile connected" : "No profile added"}</strong><small className={github ? "source-ready" : "source-empty"}>{github ? "Public evidence" : "Not connected"}</small></div>
+                <div className="register-row"><span><Link2 size={16} />Portfolio</span><strong>{portfolio || "No portfolio link"}</strong><small className={portfolio ? "source-ready" : "source-empty"}>{portfolio ? "Public evidence" : "Optional"}</small></div>
               </div>
             </section>
              <footer className="brief-method"><ShieldCheck size={17} /><p><strong>How to use this workspace</strong> The network records evidence independently of any role. Profile shows how the same evidence aligns with Software, Data, AI and Cloud role families.</p><button className="text-button" onClick={() => navigate(productRoutes.graph)}>Open full capability report</button></footer>
