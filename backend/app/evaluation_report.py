@@ -8,6 +8,8 @@ from .role_decoder import decode_role
 
 def _cases(name: str) -> list[dict]:
     path = Path(__file__).parents[1] / "evaluation" / name
+    if not path.exists():
+        path = Path.cwd() / "evaluation" / name
     return json.loads(path.read_text(encoding="utf-8"))
 
 
