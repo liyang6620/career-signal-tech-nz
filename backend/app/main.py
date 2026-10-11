@@ -1187,9 +1187,11 @@ def saved_job_comparison_facts(job: SavedJob) -> list[dict[str, str]]:
     text = " ".join(part for part in (job.title, job.description or "") if part)
     employer = job.company
     if employer.strip().lower() in {"employer not specified", "unknown employer"}:
-        match = re.match(r"\s*([^.!?]+?)\s+is hiring\b", job.description or "", re.I)
-        if match:
-            employer = match.group(1).strip()
+        description = job.description or ""
+        marker_index = description.casefold().find(" is hiring")
+        candidate = description[:marker_index].strip() if marker_index >= 0 else ""
+        if candidate and len(candidate) <= 200 and not any(mark in candidate for mark in ".!?"):
+            employer = candidate
     facts: list[dict[str, str]] = [
         {"label": "Employer", "value": employer, "source": "advertisement text" if employer != job.company else "saved record"},
         {"label": "Location", "value": job.location, "source": "saved record"},

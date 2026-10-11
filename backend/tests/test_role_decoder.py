@@ -3,6 +3,15 @@
 from app.role_decoder import decode_role
 
 
+def test_decoder_handles_long_untrusted_markup_without_regex_backtracking() -> None:
+    description = "<section>" + ("#" * 20_000) + " Python and SQL data engineering</section>"
+
+    decoded = decode_role("Data Engineer", description)
+
+    assert decoded.role_family == "data-engineer"
+    assert {item.slug for item in decoded.skill_signals} >= {"python", "sql"}
+
+
 def test_multi_track_advert_is_not_forced_into_one_family() -> None:
     decoded = decode_role(
         "Engineering Summer Interns",

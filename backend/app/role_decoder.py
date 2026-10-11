@@ -1,8 +1,18 @@
 import html
 import re
 from dataclasses import dataclass
+from html.parser import HTMLParser
 
 from .taxonomy import ROLE_REQUIREMENTS, SKILLS
+
+
+class _JobTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
 
 ROLE_LABELS = {
     "software": "Software Engineering",
@@ -219,7 +229,7 @@ def _skill_importance(text: str, patterns: tuple[str, ...]) -> str:
         r"ideal applicant", r"nice to have", r"preferred", r"desirable", r"an advantage",
     )
     for raw_line in text.splitlines():
-        segment = re.sub(r"^[\s•*#\-–—]+|[\s*#]+$", "", raw_line).strip()
+        segment = raw_line.strip().strip("•*#-–—").strip()
         if not segment:
             continue
         is_list_item = bool(re.match(r"^\s*(?:[-–—•]|\d+[.)])\s+", raw_line))
@@ -249,7 +259,10 @@ def _skill_importance(text: str, patterns: tuple[str, ...]) -> str:
 
 def _normalise_job_text(value: str) -> str:
     value = html.unescape(value).replace("\xa0", " ")
-    value = re.sub(r"<[^>]+>", " ", value)
+    parser = _JobTextParser()
+    parser.feed(value)
+    parser.close()
+    value = " ".join(parser.parts)
     return re.sub(r"[ \t]+", " ", value)
 
 

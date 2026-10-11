@@ -34,3 +34,16 @@ def test_empty_technical_requirements_use_labelled_role_benchmark() -> None:
     assert demands
     assert {item["signal_source"] for item in demands} == {"role_benchmark"}
 
+
+def test_unknown_employer_inference_is_bounded_for_long_adverts() -> None:
+    job = SimpleNamespace(
+        title="Software Engineer",
+        company="Employer not specified",
+        location="Auckland",
+        description=("A" * 50_000) + " is hiring a software engineer.",
+    )
+
+    facts = {fact["label"]: fact["value"] for fact in saved_job_comparison_facts(job)}
+
+    assert facts["Employer"] == "Employer not specified"
+
