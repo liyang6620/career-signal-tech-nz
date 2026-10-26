@@ -7,7 +7,9 @@ COPY evaluation ./evaluation
 COPY alembic.ini ./
 COPY migrations ./migrations
 RUN pip install --no-cache-dir .
-RUN useradd --create-home appuser
+RUN useradd --create-home appuser \
+    && mkdir -p /home/appuser/.cache/fastembed \
+    && chown -R appuser:appuser /home/appuser/.cache
 USER appuser
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["python", "-m", "app.api_server"]

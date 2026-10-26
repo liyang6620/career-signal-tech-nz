@@ -2,6 +2,7 @@ import logging
 import tempfile
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import clamd
 from sqlalchemy import and_, or_, select
@@ -23,6 +24,7 @@ from .models import (
     EvidenceUpload,
     ProcessingJob,
 )
+from .startup import DependencyStartupError, retry_dependency, wait_for_database
 from .storage import delete_object, download_object, ensure_bucket
 
 logging.basicConfig(level=logging.INFO)
@@ -396,7 +398,16 @@ def enqueue_stale_extractions() -> int:
 
 
 def run() -> None:
-    ensure_bucket()
+    settings = get_settings()
+    ready_file = Path(settings.worker_ready_file)
+    ready_file.unlink(missing_ok=True)
+    try:
+        wait_for_database(logger=logger)
+        retry_dependency("object storage", ensure_bucket, logger=logger)
+    except DependencyStartupError as exc:
+        logger.critical("Worker startup failed: %s", exc, exc_info=True)
+        raise SystemExit(1) from exc
+    ready_file.write_text("ready\n", encoding="ascii")
     logger.info("Evidence worker started")
     queued = enqueue_stale_extractions()
     if queued:

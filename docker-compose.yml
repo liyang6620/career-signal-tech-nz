@@ -1,40 +1,40 @@
 services:
   database:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:0.8.1-pg16
     environment:
-      POSTGRES_DB: career_signal
-      POSTGRES_USER: career_signal
-      POSTGRES_PASSWORD: career_signal
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - career_signal_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U career_signal -d career_signal"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?Set POSTGRES_USER in .env} -d ${POSTGRES_DB:?Set POSTGRES_DB in .env}"]
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   api:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://career_signal:career_signal@database:5432/career_signal
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@database:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
-      JWT_SECRET: ${JWT_SECRET:-development-only-change-me-at-least-32-bytes}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-900}
       EMBEDDING_MODE: ${EMBEDDING_MODE:-semantic}
       STORAGE_ENDPOINT: http://storage:9000
       STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}
-      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-career-signal}
-      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-development-storage-secret}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?Set STORAGE_ACCESS_KEY in .env}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY in .env}
       CLAMAV_HOST: antivirus
-      INGESTION_API_KEY: ${INGESTION_API_KEY:-development-ingestion-key}
+      INGESTION_API_KEY: ${INGESTION_API_KEY:?Set INGESTION_API_KEY in .env}
       EMBEDDING_CACHE_PATH: /home/appuser/.cache/fastembed
+      STARTUP_SUPERVISED: "true"
     ports:
-      - "${API_HOST_PORT:-8000}:8000"
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
     depends_on:
       database:
         condition: service_healthy
@@ -49,50 +49,63 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
       interval: 10s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 20
+      start_period: 150s
 
   worker:
     build: ./backend
     command: ["python", "-m", "app.worker"]
     environment:
-      DATABASE_URL: postgresql+psycopg://career_signal:career_signal@database:5432/career_signal
-      JWT_SECRET: ${JWT_SECRET:-development-only-change-me-at-least-32-bytes}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@database:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-900}
       EMBEDDING_MODE: ${EMBEDDING_MODE:-semantic}
       STORAGE_ENDPOINT: http://storage:9000
       STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
-      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-career-signal}
-      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-development-storage-secret}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?Set STORAGE_ACCESS_KEY in .env}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY in .env}
       CLAMAV_HOST: antivirus
+      EMBEDDING_CACHE_PATH: /home/appuser/.cache/fastembed
     depends_on:
-      api:
+      database:
         condition: service_healthy
       storage:
-        condition: service_started
+        condition: service_healthy
       antivirus:
         condition: service_healthy
     restart: unless-stopped
+    volumes:
+      - career_signal_models:/home/appuser/.cache/fastembed
+    healthcheck:
+      test: ["CMD", "python", "-c", "from pathlib import Path; raise SystemExit(0 if Path('/tmp/career-signal-worker-ready').is_file() else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 150s
 
   storage:
-    image: quay.io/minio/minio:latest
-    command: server /data --console-address ":9001"
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r3
     environment:
-      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-career-signal}
-      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-development-storage-secret}
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?Set STORAGE_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY in .env}
       MINIO_API_CORS_ALLOW_ORIGIN: ${STORAGE_CORS_ORIGIN:-http://localhost:5173}
     ports:
-      - "${STORAGE_HOST_PORT:-9000}:9000"
-      - "${STORAGE_CONSOLE_HOST_PORT:-9001}:9001"
+      - "127.0.0.1:${STORAGE_HOST_PORT:-9000}:9000"
+      - "127.0.0.1:${STORAGE_CONSOLE_HOST_PORT:-9001}:9001"
     volumes:
-      - career_signal_storage:/data
+      - career_signal_storage:/bitnami/minio/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   antivirus:
-    image: clamav/clamav:stable
-    ports:
-      - "3310:3310"
+    image: clamav/clamav:1.4.3
     volumes:
       - clamav_data:/var/lib/clamav
     restart: unless-stopped
