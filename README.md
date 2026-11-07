@@ -22,19 +22,20 @@ The API uses Render's free tier and may need roughly 10–60 seconds to wake aft
 
 ### 90-second interview walkthrough
 
-1. Open **Profile** to show reviewed evidence, maturity, confidence and source coverage.
-2. Switch role-family filters to explain how one evidence record travels across five technical directions.
-3. Open **Decode role** and show advert-specific requirements and explainable evidence comparison.
-4. Open **Applications**, select two saved roles and compare technical requirements and decision factors.
-5. Open **Pathways** to turn the highest-priority evidence gap into a next project decision.
+1. Open **Overview** to show the target role, evidence signal, source coverage and next actions.
+2. Open **My evidence** to inspect the reviewed CV, GitHub and portfolio evidence behind the scores.
+3. Open **Analysis**, switch role families and show the skill benchmark, leverage view and adjacent paths.
+4. Open **Job decoder** and show advert-specific requirements and explainable evidence comparison.
+5. Open **Market** to inspect NZ demand and ask the source-linked job records a focused question.
+6. Open **Applications**, select two saved roles and compare technical requirements and decision factors.
 
 ## Product tour
 
-| Evidence-led capability profile | Job-advertisement decoder |
+| Role-family analysis | Job-advertisement decoder |
 | --- | --- |
-| [![CareerSignal capability profile showing reviewed skills, confidence and evidence maturity](docs/screenshots/capability-profile.png)](docs/screenshots/capability-profile.png) | [![CareerSignal role decoder showing eligibility checks, role-family proximity and evidence comparison](docs/screenshots/role-decoder.png)](docs/screenshots/role-decoder.png) |
-| **Saved-role comparison** | **Career pathway planner** |
-| [![CareerSignal comparison of two saved roles and their technical requirements](docs/screenshots/saved-role-comparison.png)](docs/screenshots/saved-role-comparison.png) | [![CareerSignal pathway planner showing adjacent roles and the next evidence gap](docs/screenshots/career-pathways.png)](docs/screenshots/career-pathways.png) |
+| [![CareerSignal Analysis showing role-family benchmarks, market demand and evidence strength](docs/screenshots/capability-profile.png)](docs/screenshots/capability-profile.png) | [![CareerSignal Job decoder showing an annotated advert, eligibility checks and evidence comparison](docs/screenshots/role-decoder.png)](docs/screenshots/role-decoder.png) |
+| **Saved-role comparison** | **Adjacent career paths** |
+| [![CareerSignal Applications comparison showing decision factors and the user's evidence](docs/screenshots/saved-role-comparison.png)](docs/screenshots/saved-role-comparison.png) | [![CareerSignal Analysis showing adjacent technical paths and the next evidence gap](docs/screenshots/career-pathways.png)](docs/screenshots/career-pathways.png) |
 
 ## Product capabilities
 
@@ -47,6 +48,8 @@ The API uses Render's free tier and may need roughly 10–60 seconds to wake aft
 - Saved-role comparison, notes, status history and application tracking
 - Account export and deletion controls
 - Installable PWA and Capacitor Android wrapper
+
+The authenticated workspace uses six primary destinations: **Overview**, **My evidence**, **Analysis**, **Job decoder**, **Market** and **Applications**. The former Profile and Pathways experiences are combined in Analysis, while source-linked employer evidence retrieval is part of Market.
 
 Scores are deterministic and auditable. Evidence maturity, extraction confidence, source triangulation, role demand and market frequency remain separate signals. They indicate the strength of available evidence, not human ability or a hiring outcome.
 
@@ -64,7 +67,7 @@ governed collectors + hybrid retrieval + background worker
 
 Core stack:
 
-- React 19, TypeScript, Vite, ECharts and React Flow
+- React 19, TypeScript and Vite with responsive CSS and inline SVG data views
 - Python 3.12, FastAPI, Pydantic and SQLAlchemy
 - PostgreSQL 16, pgvector and Alembic
 - Argon2 passwords, short-lived JWTs and rotated refresh sessions

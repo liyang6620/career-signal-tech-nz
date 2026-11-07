@@ -20,7 +20,7 @@ export type SkillDemand = { slug: string; name: string; required: boolean; impor
 export type RoleMatch = { role_family: Exclude<RoleKey, "">; role_label: string; match_score: number };
 export type EligibilityRequirement = { category: string; label: string; importance: "required" | "stated" | "preferred"; excerpt: string };
 export type DecodedRole = { analysis_id?: string | null; role_family: Exclude<RoleKey, "">; role_label: string; confidence: number; seniority: string; scope_status: "matched" | "mixed" | "adjacent" | "out_of_scope"; taxonomy_coverage: number; matched_skills: { slug: string; name: string; mention_count: number }[]; skill_demands: SkillDemand[]; role_matches: RoleMatch[]; unmapped_skills: string[]; eligibility_requirements: EligibilityRequirement[] };
-export type ProductView = "workspace" | "market" | "decoder" | "evidence" | "path" | "graph" | "route" | "jobs" | "settings";
+export type ProductView = "workspace" | "record" | "market" | "decoder" | "evidence" | "path" | "graph" | "route" | "jobs" | "settings";
 export type EvidenceResult = { citation_id: string; title: string; company: string; location: string; source_url: string; published_at: string | null; excerpt: string; retrieval_score: number };
 export type SavedJob = { id: string; analysis_id: string | null; source_url: string; title: string; company: string; location: string; role_family: string | null; description: string | null; status: "saved" | "preparing" | "applied" | "interview" | "offer" | "rejected" | "archived"; notes: string | null; evidenced_skill_count: number; skill_count: number; top_gaps: string[]; comparison_facts: { label: string; value: string; source: string }[]; comparison_warning: string | null; created_at: string; updated_at: string };
 export type JobStatusEvent = { id: string; from_status: SavedJob["status"] | null; to_status: SavedJob["status"]; changed_at: string };
@@ -50,6 +50,7 @@ export const roles: Record<Exclude<RoleKey, "">, string> = {
 
 export const productRoutes: Record<ProductView, string> = {
   workspace: "/app/workspace",
+  record: "/app/record",
   market: "/app/market",
   decoder: "/app/roles/decode",
   evidence: "/app/evidence",
@@ -65,13 +66,14 @@ export const routeViews = Object.fromEntries(
 ) as Record<string, ProductView>;
 
 export const routeTitles: Record<ProductView, string> = {
-  workspace: "Workspace",
-  market: "Market intelligence",
-  decoder: "Role intelligence",
-  evidence: "Evidence intelligence",
-  path: "Career planning",
-  graph: "Capability profile",
-  route: "Capability profile",
-  jobs: "Application tracker",
-  settings: "Account settings",
+  workspace: "Overview",
+  record: "My evidence",
+  market: "Market",
+  decoder: "Job decoder",
+  evidence: "Market",
+  path: "Analysis",
+  graph: "Analysis",
+  route: "Analysis",
+  jobs: "Applications",
+  settings: "Settings",
 };

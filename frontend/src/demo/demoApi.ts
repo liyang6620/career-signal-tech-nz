@@ -60,8 +60,48 @@ const evidence: SkillEvidence[] = [
   { skill_slug: "terraform", skill_name: "Terraform", category: "Cloud", evidence_level: 1, confidence: 0.76, excerpt: "Used infrastructure-as-code in a guided deployment exercise.", locator: "CV: professional development", source_type: "cv" },
 ];
 
-function contribution(skill_slug: string, skill_name: string, evidence_level: number, weight: number, required = true) {
+const rolePostingCounts: Record<Exclude<RoleKey, "">, number> = {
+  software: 38,
+  "data-analyst": 24,
+  "data-engineer": 31,
+  ai: 12,
+  "cloud-devops": 21,
+};
+
+const roleSkillRows: MarketSummary["role_skills"] = [
+  { role_family: "software", skill_slug: "python", skill_name: "Python", count: 18 },
+  { role_family: "software", skill_slug: "fastapi", skill_name: "API engineering", count: 15 },
+  { role_family: "software", skill_slug: "react", skill_name: "React", count: 20 },
+  { role_family: "software", skill_slug: "pytest", skill_name: "Automated testing", count: 17 },
+  { role_family: "software", skill_slug: "system-design", skill_name: "System design", count: 12 },
+  { role_family: "data-analyst", skill_slug: "sql", skill_name: "SQL", count: 20 },
+  { role_family: "data-analyst", skill_slug: "power-bi", skill_name: "Power BI", count: 16 },
+  { role_family: "data-analyst", skill_slug: "python", skill_name: "Python", count: 10 },
+  { role_family: "data-analyst", skill_slug: "stakeholder", skill_name: "Stakeholder communication", count: 15 },
+  { role_family: "data-analyst", skill_slug: "statistics", skill_name: "Statistics", count: 11 },
+  { role_family: "data-engineer", skill_slug: "sql", skill_name: "SQL", count: 25 },
+  { role_family: "data-engineer", skill_slug: "python", skill_name: "Python", count: 22 },
+  { role_family: "data-engineer", skill_slug: "postgresql", skill_name: "PostgreSQL", count: 14 },
+  { role_family: "data-engineer", skill_slug: "docker", skill_name: "Docker", count: 15 },
+  { role_family: "data-engineer", skill_slug: "airflow", skill_name: "Airflow", count: 9 },
+  { role_family: "data-engineer", skill_slug: "aws", skill_name: "AWS", count: 17 },
+  { role_family: "ai", skill_slug: "python", skill_name: "Python", count: 8 },
+  { role_family: "ai", skill_slug: "fastapi", skill_name: "API delivery", count: 7 },
+  { role_family: "ai", skill_slug: "rag", skill_name: "Retrieval-augmented generation", count: 6 },
+  { role_family: "ai", skill_slug: "evaluation", skill_name: "Model evaluation", count: 5 },
+  { role_family: "ai", skill_slug: "mlops", skill_name: "MLOps", count: 4 },
+  { role_family: "cloud-devops", skill_slug: "aws", skill_name: "AWS", count: 17 },
+  { role_family: "cloud-devops", skill_slug: "docker", skill_name: "Docker", count: 14 },
+  { role_family: "cloud-devops", skill_slug: "github-actions", skill_name: "CI/CD", count: 12 },
+  { role_family: "cloud-devops", skill_slug: "terraform", skill_name: "Terraform", count: 11 },
+  { role_family: "cloud-devops", skill_slug: "kubernetes", skill_name: "Kubernetes", count: 8 },
+];
+
+const roleSkillCount = new Map(roleSkillRows.map((item) => [`${item.role_family}:${item.skill_slug}`, item.count]));
+
+function contribution(role: Exclude<RoleKey, "">, skill_slug: string, skill_name: string, evidence_level: number, weight: number, required = true) {
   const normalized_score = Math.min(96, evidence_level * 19 + 8);
+  const market_mention_count = roleSkillCount.get(`${role}:${skill_slug}`) ?? 0;
   return {
     skill_slug, skill_name, weight, required, evidence_level, evidence_confidence: evidence_level ? 0.9 : 0,
     source_count: evidence_level ? 2 : 0, source_type_count: evidence_level ? 2 : 0,
@@ -69,8 +109,8 @@ function contribution(skill_slug: string, skill_name: string, evidence_level: nu
     specificity_bonus: evidence_level ? 2 : 0, verification_bonus: evidence_level >= 3 ? 2 : 0,
     outcome_bonus: evidence_level >= 4 ? 2 : 0, corroboration_bonus: evidence_level ? 2 : 0,
     diversity_bonus: evidence_level ? 1 : 0, score_factors: evidence_level ? ["reviewed evidence", "multiple sources"] : ["evidence gap"],
-    normalized_score, weighted_score: normalized_score * weight, market_frequency: 0.62,
-    market_mention_count: 18,
+    normalized_score, weighted_score: normalized_score * weight,
+    market_frequency: market_mention_count / rolePostingCounts[role], market_mention_count,
   };
 }
 
@@ -98,13 +138,13 @@ function fitFor(role: Exclude<RoleKey, "">): RoleFit {
     coverage,
     evidence_depth,
     cap_applied: false,
-    contributions: fitSkills[role].map(([slug, name, level, weight, required]) => contribution(slug, name, level, weight, required)),
+    contributions: fitSkills[role].map(([slug, name, level, weight, required]) => contribution(role, slug, name, level, weight, required)),
     benchmark_sources: [
       { name: "O*NET skills reference", url: "https://www.onetonline.org/skills/" },
       { name: "SFIA 9", url: "https://sfia-online.org/en/sfia-9" },
     ],
     benchmark_methodology: "Reviewed evidence is compared with an occupational prior and the current indexed NZ sample.",
-    market_posting_count: 31,
+    market_posting_count: rolePostingCounts[role],
   };
 }
 
@@ -113,9 +153,9 @@ const market: MarketSummary = {
   source_count: 3,
   latest_retrieved_at: now,
   roles: [
-    { role_family: "software", count: 38 }, { role_family: "data-analyst", count: 24 },
-    { role_family: "data-engineer", count: 31 }, { role_family: "ai", count: 12 },
-    { role_family: "cloud-devops", count: 21 },
+    { role_family: "software", count: rolePostingCounts.software }, { role_family: "data-analyst", count: rolePostingCounts["data-analyst"] },
+    { role_family: "data-engineer", count: rolePostingCounts["data-engineer"] }, { role_family: "ai", count: rolePostingCounts.ai },
+    { role_family: "cloud-devops", count: rolePostingCounts["cloud-devops"] },
   ],
   seniority: [{ seniority: "Graduate / Junior", count: 44 }, { seniority: "Intermediate", count: 51 }, { seniority: "Senior", count: 31 }],
   role_seniority: [{ role_family: "data-engineer", seniority: "Graduate / Junior", count: 11 }],
@@ -123,12 +163,22 @@ const market: MarketSummary = {
     { skill_slug: "sql", skill_name: "SQL", count: 64 }, { skill_slug: "python", skill_name: "Python", count: 58 },
     { skill_slug: "aws", skill_name: "AWS", count: 47 }, { skill_slug: "docker", skill_name: "Docker", count: 39 },
     { skill_slug: "react", skill_name: "React", count: 34 },
+    { skill_slug: "fastapi", skill_name: "API engineering", count: 22 },
+    { skill_slug: "pytest", skill_name: "Automated testing", count: 17 },
+    { skill_slug: "power-bi", skill_name: "Power BI", count: 16 },
+    { skill_slug: "stakeholder", skill_name: "Stakeholder communication", count: 15 },
+    { skill_slug: "postgresql", skill_name: "PostgreSQL", count: 14 },
+    { skill_slug: "system-design", skill_name: "System design", count: 12 },
+    { skill_slug: "github-actions", skill_name: "CI/CD", count: 12 },
+    { skill_slug: "statistics", skill_name: "Statistics", count: 11 },
+    { skill_slug: "terraform", skill_name: "Terraform", count: 11 },
+    { skill_slug: "airflow", skill_name: "Airflow", count: 9 },
+    { skill_slug: "kubernetes", skill_name: "Kubernetes", count: 8 },
+    { skill_slug: "rag", skill_name: "Retrieval-augmented generation", count: 6 },
+    { skill_slug: "evaluation", skill_name: "Model evaluation", count: 5 },
+    { skill_slug: "mlops", skill_name: "MLOps", count: 4 },
   ],
-  role_skills: [
-    { role_family: "data-engineer", skill_slug: "sql", skill_name: "SQL", count: 25 },
-    { role_family: "data-engineer", skill_slug: "python", skill_name: "Python", count: 22 },
-    { role_family: "data-engineer", skill_slug: "aws", skill_name: "AWS", count: 17 },
-  ],
+  role_skills: roleSkillRows,
   locations: [{ location: "Auckland", count: 59 }, { location: "Wellington", count: 39 }, { location: "Christchurch", count: 18 }, { location: "Remote / hybrid", count: 10 }],
   role_locations: [{ role_family: "data-engineer", location: "Auckland", count: 16 }, { role_family: "data-engineer", location: "Wellington", count: 9 }],
 };
@@ -139,6 +189,13 @@ const quality: MarketQuality = {
   stale_posting_count: 6, collector_completed_count: 3, collector_failed_count: 0,
   sample_warnings: ["This is a bounded demonstration dataset, not the entire NZ labour market."],
   sources: ["SEEK", "Trade Me Jobs", "Public employer careers"].map((name) => ({ name, adapter: "permitted-public-sample", enabled: true, latest_status: "completed", last_run_at: now, next_run_at: null, refresh_interval_minutes: 1440, accepted_count: 42, rejected_count: 3 })),
+};
+
+export const demoLandingData = {
+  market,
+  fit: fitFor("data-engineer"),
+  evidence,
+  profile,
 };
 
 const analysisOne: DecodedRole = {
@@ -231,7 +288,7 @@ export async function demoFetch(input: RequestInfo | URL, init?: RequestInit): P
     { id: "demo-analysis-two", title: "Graduate Cloud Engineer", role_family: "cloud-devops", scope_status: "matched", confidence: 87, created_at: "2026-10-08T08:00:00Z" },
   ]);
   if (path === "/api/v1/role-decoder" && method === "POST") return json(analysisOne);
-  if (path === "/api/v1/rag/search" && method === "POST") return json({ results: [
+  if (path === "/api/v1/rag/search" && method === "POST") return json({ citations: [
     { citation_id: "demo-citation-one", title: "Junior Data Engineer", company: "Harbour Analytics", location: "Auckland", source_url: initialJobs[0].source_url, published_at: "2026-10-05", excerpt: "The role names SQL, Python, AWS and data-quality testing as core delivery capabilities.", retrieval_score: 0.92 },
     { citation_id: "demo-citation-two", title: "Graduate Cloud Engineer", company: "Koru Platforms", location: "Wellington", source_url: initialJobs[1].source_url, published_at: "2026-10-06", excerpt: "The advert emphasises AWS, Docker, Terraform and collaborative incident response.", retrieval_score: 0.86 },
   ] });

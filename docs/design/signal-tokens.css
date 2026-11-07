@@ -1,0 +1,63 @@
+/* CareerSignal "Signal" final visual tokens.
+   Reference values for the production frontend. The deployed font files live in
+   frontend/public/fonts/; these relative URLs keep this document self-contained. */
+
+@font-face { font-family: "Bricolage"; src: url(../../frontend/public/fonts/bricolage-grotesque-latin-500-normal.woff2) format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Bricolage"; src: url(../../frontend/public/fonts/bricolage-grotesque-latin-700-normal.woff2) format("woff2"); font-weight: 600 700; font-display: swap; }
+@font-face { font-family: "Bricolage"; src: url(../../frontend/public/fonts/bricolage-grotesque-latin-800-normal.woff2) format("woff2"); font-weight: 800; font-display: swap; }
+/* IBM Plex Sans 400/500/600 and IBM Plex Mono 400/500 are already dependencies (@fontsource). */
+
+:root {
+  /* type */
+  --font-display: "Bricolage", "IBM Plex Sans", system-ui, sans-serif; /* headings, big figures */
+  --font-text: "IBM Plex Sans", system-ui, sans-serif;                 /* body, controls */
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;               /* labels, table heads, locators, context lines */
+
+  /* surfaces */
+  --bg: #eceef1;          /* fog: page and top bar */
+  --surface: #f7f8fa;     /* the few boxed elements: job header, advert, cards on the board, citations */
+  --side: #e2e5ea;        /* advert margin, empty-stage placeholders */
+  --line: #cfd3da;        /* hairlines between rows */
+  --rule: #0e0e0e;        /* 2px section rules, table head underline, top-bar bottom border */
+
+  /* ink */
+  --ink: #0e0e0e;
+  --ink-2: #4f4d46;
+  --ink-3: #8a877c;
+
+  /* dark slabs (verdict, selected role card, selected path) */
+  --dark: #0e0e0e;
+  --dark-2: #1b1b1a;
+  --dark-3: #3a3935;
+  --on-dark: #ecebe5;
+  --on-dark-2: #a5a39a;
+  --on-dark-strong: #ffffff;
+
+  /* the one brand colour; also means "employer demand" in data */
+  --brand: #2f2fe6;
+  --brand-soft: #dcdcfb;
+  --brand-text: #2323b8;
+  --brand-on-dark: #8c8cff;
+  --brand-field-muted: #cfd0ff; /* secondary text on a solid --brand field */
+
+  /* data meanings */
+  --proof: #0f8a5f;  --proof-soft: #d5eee2;  --proof-on-dark: #5fe0a8;
+  --gap: #f04a23;    --gap-soft: #fde0d6;    --gap-on-dark: #ff8d6e;
+  --neutral: #77746a; --neutral-soft: #e2e0d8; /* comparison / non-target role families, conditions */
+
+  /* shape */
+  --radius: 0;          /* cards, panels, bars, chips are square */
+  --radius-control: 3px; /* buttons and inputs only */
+  --rule-width: 2px;
+}
+
+/* Reference rules (see IMPLEMENTATION_BRIEF.md for the full list)
+   h1 page title:   var(--font-display) 800, 46px/1.02, letter-spacing -0.035em (32px on mobile)
+   h2 section:      var(--font-display) 700, ~19–22px, letter-spacing -0.02em
+   hero figure:     var(--font-display) 800, 112px/.85 (76px mobile), letter-spacing -0.03em
+   context line:    var(--font-mono) 11.5–12px, var(--ink-2), above every h1
+   section:         no fill, border-top: var(--rule-width) solid var(--rule), padding-top 16px
+   selected state:  background var(--dark), colour var(--on-dark-strong)
+   current nav:     4px var(--brand) bottom border, ink text, weight 600
+   proof level:     5 rising bars (the logo glyph), filled = var(--proof), empty = var(--line); gap = all --gap-soft
+*/
