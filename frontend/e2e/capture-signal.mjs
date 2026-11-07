@@ -39,8 +39,13 @@ async function captureDocs(label, path, prepare, anchor) {
   await openDemoPage(page, path);
   if (prepare) await prepare(page);
   if (anchor) {
-    await anchor(page).scrollIntoViewIfNeeded();
-    await page.evaluate(() => window.scrollBy({ top: -150, behavior: "instant" }));
+    const target = anchor(page);
+    await target.waitFor({ state: "visible" });
+    await target.evaluate((element) => {
+      const stickyHeaderClearance = 84;
+      const top = element.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({ top: Math.max(0, top - stickyHeaderClearance), behavior: "instant" });
+    });
   } else {
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   }
@@ -104,9 +109,9 @@ await captureDocs("saved-role-comparison.png", "/app/jobs", async (page) => {
   await toggles.nth(0).check();
   await toggles.nth(1).check();
   await page.getByRole("heading", { name: "What each job is asking for" }).waitFor();
-}, (page) => page.locator(".jobs-compare-panel"));
+}, (page) => page.locator(".jobs-decision-factors"));
 
 await captureDocs("career-pathways.png", "/app/profile", undefined,
-  (page) => page.getByRole("heading", { name: "Adjacent paths" }));
+  (page) => page.locator(".adjacent-paths"));
 
 await browser.close();
