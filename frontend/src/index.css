@@ -2,10 +2,29 @@
 @import '@fontsource/ibm-plex-sans/500.css';
 @import '@fontsource/ibm-plex-sans/600.css';
 @import '@fontsource/ibm-plex-sans/700.css';
-@import '@fontsource/ibm-plex-serif/500.css';
-@import '@fontsource/ibm-plex-serif/600.css';
 @import '@fontsource/ibm-plex-mono/400.css';
 @import '@fontsource/ibm-plex-mono/500.css';
+
+@font-face {
+  font-family: 'Bricolage';
+  src: url('/fonts/bricolage-grotesque-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Bricolage';
+  src: url('/fonts/bricolage-grotesque-latin-700-normal.woff2') format('woff2');
+  font-weight: 600 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Bricolage';
+  src: url('/fonts/bricolage-grotesque-latin-800-normal.woff2') format('woff2');
+  font-weight: 800;
+  font-display: swap;
+}
 
 html {
   font-synthesis: none;
@@ -14,7 +33,10 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
-body { margin: 0; }
+body {
+  margin: 0;
+  background: #eceef1;
+}
 
 .native-app body {
   padding-top: env(safe-area-inset-top);

@@ -1,4 +1,4 @@
-const CACHE_NAME = "careersignal-shell-v4";
+const CACHE_NAME = "careersignal-shell-v5";
 const APP_SHELL = [
   "/",
   "/offline.html",

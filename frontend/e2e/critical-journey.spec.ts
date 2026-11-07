@@ -120,9 +120,9 @@ async function mockAuthenticatedApi(page: Page) {
 test("public entry and protected routing remain usable", async ({ page }) => {
   await page.route("**/api/v1/auth/refresh", (route) => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "CareerSignal Tech NZ" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "See how your skills match NZ tech roles." })).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("navigation").getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
 
@@ -176,7 +176,7 @@ test("a recruiter can explore the complete demo without registering", async ({ p
 
   await expect(page).toHaveURL(/\/app\/workspace$/);
   await expect(page.getByText("Demo workspace.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your evidence, ready for different technical directions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Data Engineer / Analytics Engineer" }).first()).toBeVisible();
   await page.getByRole("button", { name: /Applications/ }).click();
   await expect(page.getByRole("heading", { name: "Your role decisions, in one place" })).toBeVisible();
   await expect(page.getByText("Junior Data Engineer", { exact: true }).first()).toBeVisible();
@@ -184,13 +184,28 @@ test("a recruiter can explore the complete demo without registering", async ({ p
   await expectNoSeriousAccessibilityViolations(page);
 });
 
+test("demo market search returns grounded job records", async ({ page }) => {
+  await page.route("**/api/v1/auth/refresh", (route) => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Explore live demo" }).click();
+  await page.getByRole("button", { name: "Market", exact: true }).click();
+
+  await expect(page.getByText("Graduate and junior").locator("..").getByText("11", { exact: true })).toBeVisible();
+  const sqlMarketRow = page.locator(".market-skill-table .market-table-row").filter({ hasText: "SQL" });
+  await expect(sqlMarketRow.getByText("Verified", { exact: true })).toBeVisible();
+  await page.getByLabel("Market question or capability").fill("junior data engineering testing");
+  await page.getByRole("button", { name: "Search job records" }).click();
+  await expect(page.getByText("Harbour Analytics", { exact: true })).toBeVisible();
+  await expect(page.getByText("Koru Platforms", { exact: true })).toBeVisible();
+});
+
 test("the legacy plan route resolves to the capability profile", async ({ page }) => {
   await mockAuthenticatedApi(page);
   await page.goto("/app/plan");
 
   await expect(page).toHaveURL(/\/app\/profile$/);
-  await expect(page.getByRole("heading", { name: "All the evidence you can currently prove" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Three views of evidence quality" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How your evidence travels across roles" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Quality of your evidence" }).first()).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
 });
 
@@ -207,31 +222,154 @@ test("a user can access a portable account export", async ({ page }) => {
 });
 
 test("personal capability profile shows evidence analysis", async ({ page }) => {
+  test.slow();
   await mockAuthenticatedApi(page);
   await page.goto("/app/profile");
 
-  await expect(page.getByRole("heading", { name: "All the evidence you can currently prove" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "What your evidence currently shows" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Three views of evidence quality" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Why this profile is evidence-led" })).toBeVisible();
-  await expect(page.getByRole("img", { name: "Evidence strength by skill" })).toBeVisible();
-  const evidenceRows = page.locator(".personal-graph-register > div");
-  await expect(evidenceRows).toHaveCount(2);
-  await expect(evidenceRows.filter({ hasText: "SQL" })).toHaveCount(1);
-  await expect(evidenceRows.filter({ hasText: "Python" })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "How your evidence travels across roles" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Quality of your evidence" }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Adjacent paths" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Proof levels" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Strength by domain" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Source coverage" })).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("analysis loads market counts for adjacent paths", async ({ page }) => {
+  await page.route("**/api/v1/auth/refresh", (route) => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Explore live demo" }).click();
+  await page.getByRole("button", { name: "Analysis", exact: true }).click();
+
+  const advertCounts = page.locator(".adjacent-path-grid article dl > div:nth-child(3) dd");
+  await expect(advertCounts).toHaveText(["24", "21", "38"]);
+});
+
+test("demo market shares and decoder gaps use consistent signals", async ({ page }) => {
+  test.slow();
+  await page.route("**/api/v1/auth/refresh", (route) => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
+  await page.goto("/");
+
+  await expect(page.locator(".landing-preview-list > div > span:first-child > small")).toHaveText([
+    "81% market signal",
+    "71% market signal",
+    "45% market signal",
+    "48% market signal",
+    "29% market signal",
+  ]);
+  await expect(page.locator(".landing-preview-list")).not.toContainText("0% market signal");
+
+  await page.getByRole("button", { name: "Explore live demo" }).click();
+  await page.goto("/app/profile");
+  await expect(page.locator(".signal-skill-table tbody tr td:nth-child(2)")).toHaveText(["81%", "71%", "29%", "45%", "48%"]);
+
+  const labelBoxes = await page.locator(".leverage-label").evaluateAll((labels) => labels.map((label) => {
+    const box = label.getBoundingClientRect();
+    return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+  }));
+  for (let left = 0; left < labelBoxes.length; left += 1) {
+    for (let right = left + 1; right < labelBoxes.length; right += 1) {
+      const a = labelBoxes[left]; const b = labelBoxes[right];
+      expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBeTruthy();
+    }
+  }
+
+  await page.goto("/app/roles/decode");
+  await page.getByLabel("Advertised title").fill("Junior Data Engineer");
+  await page.getByLabel("Job advertisement").fill("Harbour Analytics needs a Junior Data Engineer to build reliable SQL and Python pipelines on AWS. Applicants must support Airflow orchestration and already have the right to work in New Zealand.");
+  await page.getByRole("button", { name: "Compare with my profile" }).click();
+  await page.getByRole("heading", { name: "Annotated advertisement" }).waitFor();
+
+  const airflowHighlight = page.locator(".decoder-advert mark.gap").filter({ hasText: "Airflow" });
+  await expect(airflowHighlight).toBeVisible();
+  await expect(airflowHighlight).toHaveCSS("color", "rgb(240, 74, 35)");
+  await expect(airflowHighlight).toHaveCSS("background-color", "rgb(253, 224, 214)");
+  await expect(page.locator(".decoder-margin-notes > div.gap").filter({ hasText: "Airflow" })).toContainText("Supporting");
+  await expect(page.locator(".decoder-score-panel tbody tr").filter({ hasText: "Airflow" })).toContainText("Supporting");
+  await expect(page.locator(".decoder-input")).toHaveCSS("border-top-width", "0px");
+});
+
+test("Signal tokens remain the computed application palette", async ({ page }) => {
+  await page.route("**/api/v1/auth/refresh", (route) => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Explore live demo" }).click();
+  await expect(page.locator(".signal-report-side")).toBeVisible();
+  await expect(page.locator(".primary-button").first()).toBeVisible();
+  const palette = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const heading = getComputedStyle(document.querySelector("h1")!);
+    const brandField = getComputedStyle(document.querySelector(".signal-report-side")!);
+    const primary = getComputedStyle(document.querySelector(".primary-button")!);
+    return {
+      brandToken: root.getPropertyValue("--brand").trim(),
+      inkToken: root.getPropertyValue("--ink").trim(),
+      brandField: brandField.backgroundColor,
+      primaryBackground: primary.backgroundColor,
+      headingColour: heading.color,
+      headingTracking: heading.letterSpacing,
+    };
+  });
+  expect(palette).toEqual({
+    brandToken: "#2f2fe6",
+    inkToken: "#0e0e0e",
+    brandField: "rgb(47, 47, 230)",
+    primaryBackground: "rgb(14, 14, 14)",
+    headingColour: "rgb(14, 14, 14)",
+    headingTracking: expect.stringMatching(/^-/),
+  });
+});
+
+test("mobile evidence register is not clipped", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/v1/auth/refresh", (route) => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Explore live demo" }).click();
+  await page.goto("/app/record");
+  const layout = await page.locator(".evidence-ledger").evaluate((element) => ({
+    pageWidth: document.documentElement.clientWidth,
+    pageScrollWidth: document.documentElement.scrollWidth,
+    registerWidth: element.clientWidth,
+    registerScrollWidth: element.scrollWidth,
+  }));
+  expect(layout).toEqual({ pageWidth: 390, pageScrollWidth: 390, registerWidth: layout.registerWidth, registerScrollWidth: layout.registerWidth });
+});
+
+test("mobile analysis skill rows stay inside their container", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/v1/auth/refresh", (route) => route.fulfill({ status: 401, json: { detail: "Not authenticated" } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Explore live demo" }).click();
+  await page.goto("/app/profile");
+  await expect(page.locator(".signal-skill-table tbody tr")).toHaveCount(5);
+
+  const bounds = await page.locator(".signal-skill-table .signal-table-wrap").evaluate((container) => {
+    const containerBox = container.getBoundingClientRect();
+    const cells = Array.from(container.querySelectorAll("td"))
+      .filter((cell) => getComputedStyle(cell).display !== "none")
+      .map((cell) => {
+        const box = cell.getBoundingClientRect();
+        return { left: box.left, right: box.right };
+      });
+    return { containerLeft: containerBox.left, containerRight: containerBox.right, cells };
+  });
+
+  expect(bounds.cells.length).toBeGreaterThan(0);
+  bounds.cells.forEach((cell) => {
+    expect(cell.left).toBeGreaterThanOrEqual(bounds.containerLeft - 0.5);
+    expect(cell.right).toBeLessThanOrEqual(bounds.containerRight + 0.5);
+  });
 });
 
 test("a saved opportunity opens the shared capability profile", async ({ page }) => {
   await mockAuthenticatedApi(page);
   await page.goto("/app/jobs");
 
-  await expect(page.getByText("2 / 5")).toBeVisible();
+  await expect(page.getByText("2 of 5 capabilities evidenced")).toBeVisible();
   await expect(page.getByText(/Next: Automated Testing, Airflow/)).toBeVisible();
   await page.getByRole("button", { name: "Review fit" }).first().click();
 
   await expect(page).toHaveURL(/\/app\/profile$/);
-  await expect(page.getByRole("heading", { name: "How your evidence travels across roles" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How your evidence travels across roles" }).first()).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
 });
 
@@ -258,10 +396,19 @@ test("saved roles can be compared side by side", async ({ page }) => {
   await toggles.nth(1).check();
 
   await expect(page.getByRole("heading", { name: "What each job is asking for" })).toBeVisible();
+  await expect(page.getByText("Your evidence", { exact: true }).last()).toBeVisible();
   await expect(page.getByText("SQL", { exact: true })).toBeVisible();
   await expect(page.getByText("Python", { exact: true })).toBeVisible();
   await page.waitForTimeout(300);
   expect(detailRequests).toBe(2);
+});
+
+test("closed and archived applications remain reachable", async ({ page }) => {
+  await mockAuthenticatedApi(page);
+  await page.goto("/app/jobs");
+  await page.locator(".signal-stage-select select").first().selectOption("rejected");
+  await page.getByRole("button", { name: /View Closed 1/ }).click();
+  await expect(page.getByRole("region", { name: "Closed and archived applications" })).toContainText("Graduate Data Engineer");
 });
 
 test("career path rows remain readable across responsive layouts", async ({ page }) => {
@@ -274,9 +421,10 @@ test("career path rows remain readable across responsive layouts", async ({ page
   ]) {
     await page.setViewportSize(viewport);
     await page.goto("/app/pathways");
-    await expect(page.getByRole("heading", { name: "Plan the next evidence move" })).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/profile$/);
+    await expect(page.getByRole("heading", { name: "Adjacent paths" })).toBeVisible();
 
-    const rows = page.locator(".pathway-route-card");
+    const rows = page.locator(".adjacent-path-grid article");
     await expect(rows).toHaveCount(3);
     for (const row of await rows.all()) {
       const layout = await row.evaluate((element) => {
