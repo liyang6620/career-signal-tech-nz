@@ -115,16 +115,35 @@ Invoke-RestMethod http://127.0.0.1:8000/ready
 
 Every service should become `healthy`, and readiness should return `{"status":"ready","service":"career-signal-api"}`.
 
-For separate development servers:
+### Frontend and backend development
+
+PostgreSQL remains private to the Compose network, so run the backend through
+Compose rather than starting Alembic or Uvicorn directly on the host. The
+standard backend uses the same supervised startup path as the full stack:
 
 ```bash
-cd backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-alembic upgrade head
-uvicorn app.main:app --reload --port 8001
+docker compose up --build api
 ```
+
+Compose starts the API dependencies, applies migrations inside the API
+container and publishes the API only on `127.0.0.1:${API_HOST_PORT:-8000}`.
+The database still has no host port. For API source hot reload, add the
+development override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build api
+```
+
+The override bind-mounts only `backend/app/`, runs migrations inside the
+container, and starts Uvicorn with `--reload`. Rebuild the image after changing
+`pyproject.toml`, migrations or other files outside `backend/app/`. Stop the
+development stack with the same file arguments and without `-v`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+```
+
+Run the frontend separately for Vite hot reload:
 
 ```bash
 cd frontend
@@ -132,7 +151,11 @@ npm ci
 npm run dev
 ```
 
-The frontend defaults to `http://localhost:5173`; the API and OpenAPI UI use `http://localhost:8001` and `http://localhost:8001/docs`.
+The frontend defaults to `http://localhost:5173`. The API and OpenAPI UI use
+`http://127.0.0.1:${API_HOST_PORT:-8000}` and
+`http://127.0.0.1:${API_HOST_PORT:-8000}/docs` respectively. On Windows, read
+the concrete port from `API_HOST_PORT` in `.env` rather than using the shell
+placeholder literally.
 
 ## Verification
 
