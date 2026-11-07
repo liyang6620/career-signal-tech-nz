@@ -1,6 +1,6 @@
 services:
   database:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:0.8.1-pg16
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
@@ -13,6 +13,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
 
   api:
     build: ./backend
@@ -37,6 +38,8 @@ services:
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?Set STORAGE_ACCESS_KEY}
       STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY}
       CLAMAV_HOST: antivirus
+      EMBEDDING_CACHE_PATH: /home/appuser/.cache/fastembed
+      STARTUP_SUPERVISED: "true"
     expose:
       - "8000"
     depends_on:
@@ -47,11 +50,14 @@ services:
       antivirus:
         condition: service_healthy
     restart: unless-stopped
+    volumes:
+      - career_signal_models:/home/appuser/.cache/fastembed
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
       interval: 15s
       timeout: 5s
-      retries: 6
+      retries: 20
+      start_period: 150s
 
   worker:
     build: ./backend
@@ -71,21 +77,31 @@ services:
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?Set STORAGE_ACCESS_KEY}
       STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY}
       CLAMAV_HOST: antivirus
+      EMBEDDING_CACHE_PATH: /home/appuser/.cache/fastembed
     depends_on:
-      api:
+      database:
+        condition: service_healthy
+      storage:
         condition: service_healthy
       antivirus:
         condition: service_healthy
     restart: unless-stopped
+    volumes:
+      - career_signal_models:/home/appuser/.cache/fastembed
+    healthcheck:
+      test: ["CMD", "python", "-c", "from pathlib import Path; raise SystemExit(0 if Path('/tmp/career-signal-worker-ready').is_file() else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 150s
 
   storage:
-    image: quay.io/minio/minio:latest
-    command: server /data --console-address ":9001"
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r3
     environment:
       MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?Set STORAGE_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?Set STORAGE_SECRET_KEY}
     volumes:
-      - career_signal_storage:/data
+      - career_signal_storage:/bitnami/minio/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
@@ -94,7 +110,7 @@ services:
       retries: 6
 
   antivirus:
-    image: clamav/clamav:stable
+    image: clamav/clamav:1.4.3
     volumes:
       - clamav_data:/var/lib/clamav
     restart: unless-stopped
@@ -108,3 +124,4 @@ volumes:
   career_signal_data:
   career_signal_storage:
   clamav_data:
+  career_signal_models:

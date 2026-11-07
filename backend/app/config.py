@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # for offline tests or an intentionally lexical-only deployment.
     embedding_mode: str = "semantic"
     embedding_cache_path: str = ".cache/fastembed"
+    startup_retry_attempts: int = 30
+    startup_retry_initial_seconds: float = 1.0
+    startup_retry_max_seconds: float = 5.0
+    startup_supervised: bool = False
+    api_ready_file: str = "/tmp/career-signal-api-ready"
+    worker_ready_file: str = "/tmp/career-signal-worker-ready"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

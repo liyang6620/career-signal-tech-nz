@@ -84,19 +84,66 @@ Prerequisites: Node.js 22, Python 3.12 and Docker for the full PostgreSQL/storag
 git clone https://github.com/liyang6620/career-signal-tech-nz.git
 cd career-signal-tech-nz
 cp .env.example .env
+# Fill POSTGRES_PASSWORD (URL-safe alphanumeric), JWT_SECRET, STORAGE_ACCESS_KEY,
+# STORAGE_SECRET_KEY and INGESTION_API_KEY with unique random values.
 docker compose up --build
 ```
 
-For separate development servers:
+Compose publishes the API and MinIO development endpoints on `127.0.0.1` only. PostgreSQL and ClamAV remain internal to the Compose network. The committed example deliberately leaves every secret blank; Compose refuses to start until the required values are supplied.
+
+### Container recovery and image upgrades
+
+All long-running services use `restart: unless-stopped`. API startup exposes liveness immediately but keeps `/ready` at HTTP 503 while it retries PostgreSQL up to 30 times and applies Alembic migrations. The worker uses the same bounded database retry and waits for object storage before reporting healthy. This protects Docker Desktop restarts without hiding a permanent dependency failure.
+
+Runtime images are intentionally pinned: pgvector `0.8.1-pg16`, ClamAV `1.4.3`, and the archived Bitnami MinIO distribution `2025.7.23-debian-12-r3`. The legacy MinIO image is fixed because the upstream community registry no longer retains versioned images; treat replacement with a maintained S3-compatible image as a deliberate migration. To upgrade an image:
+
+1. Read the upstream release notes and choose an explicit version.
+2. Pull and inspect the image, then update the version or digest in both Compose files.
+3. Run backend tests and `docker compose config`.
+4. Run `docker compose down` without `-v`, followed by `docker compose up -d --build` and the restart-recovery check below.
+5. Commit the image change and verification result. Never use `latest` or delete the named data volumes during an upgrade.
+
+Recovery check (PowerShell):
+
+```powershell
+docker compose down                 # never add -v
+docker compose up -d --build
+docker compose restart
+docker compose ps
+Invoke-RestMethod http://127.0.0.1:8000/ready
+```
+
+Every service should become `healthy`, and readiness should return `{"status":"ready","service":"career-signal-api"}`.
+
+### Frontend and backend development
+
+PostgreSQL remains private to the Compose network, so run the backend through
+Compose rather than starting Alembic or Uvicorn directly on the host. The
+standard backend uses the same supervised startup path as the full stack:
 
 ```bash
-cd backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-alembic upgrade head
-uvicorn app.main:app --reload --port 8001
+docker compose up --build api
 ```
+
+Compose starts the API dependencies, applies migrations inside the API
+container and publishes the API only on `127.0.0.1:${API_HOST_PORT:-8000}`.
+The database still has no host port. For API source hot reload, add the
+development override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build api
+```
+
+The override bind-mounts only `backend/app/`, runs migrations inside the
+container, and starts Uvicorn with `--reload`. Rebuild the image after changing
+`pyproject.toml`, migrations or other files outside `backend/app/`. Stop the
+development stack with the same file arguments and without `-v`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+```
+
+Run the frontend separately for Vite hot reload:
 
 ```bash
 cd frontend
@@ -104,9 +151,22 @@ npm ci
 npm run dev
 ```
 
-The frontend defaults to `http://localhost:5173`; the API and OpenAPI UI use `http://localhost:8001` and `http://localhost:8001/docs`.
+The frontend defaults to `http://localhost:5173`. The API and OpenAPI UI use
+`http://127.0.0.1:${API_HOST_PORT:-8000}` and
+`http://127.0.0.1:${API_HOST_PORT:-8000}/docs` respectively. On Windows, read
+the concrete port from `API_HOST_PORT` in `.env` rather than using the shell
+placeholder literally.
 
 ## Verification
+
+Run the backend suite inside an isolated Compose project so PostgreSQL stays internal and the development data volume is not used:
+
+```bash
+docker compose -p career-signal-compose-test -f docker-compose.yml -f docker-compose.test.yml run --rm backend-test
+docker compose -p career-signal-compose-test -f docker-compose.yml -f docker-compose.test.yml down
+```
+
+The second command intentionally omits `-v`; inspect and remove only the isolated test volume separately when it is no longer needed.
 
 ```bash
 cd backend

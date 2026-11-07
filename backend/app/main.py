@@ -552,6 +552,11 @@ def metrics() -> str:
 @app.get("/ready")
 def readiness(db: Annotated[Session, Depends(get_db)]) -> dict[str, str]:
     """Readiness is deliberately separate from liveness for container orchestration."""
+    if settings.startup_supervised and not Path(settings.api_ready_file).is_file():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Startup dependencies or migrations are not ready",
+        )
     try:
         db.execute(select(func.count()).select_from(User)).scalar_one()
     except Exception as exc:

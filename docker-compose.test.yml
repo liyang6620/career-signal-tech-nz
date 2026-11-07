@@ -4,7 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.test
     environment:
-      DATABASE_URL: postgresql+psycopg://career_signal:career_signal@database:5432/career_signal
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?Set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@database:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env}
       JWT_SECRET: test-secret-that-is-long-enough-for-tests
       INGESTION_API_KEY: development-ingestion-key
       EMBEDDING_MODE: hash
