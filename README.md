@@ -110,7 +110,7 @@ docker compose down                 # never add -v
 docker compose up -d --build
 docker compose restart
 docker compose ps
-Invoke-RestMethod http://127.0.0.1:8000/ready
+Invoke-RestMethod http://127.0.0.1:8001/ready
 ```
 
 Every service should become `healthy`, and readiness should return `{"status":"ready","service":"career-signal-api"}`.
@@ -126,9 +126,11 @@ docker compose up --build api
 ```
 
 Compose starts the API dependencies, applies migrations inside the API
-container and publishes the API only on `127.0.0.1:${API_HOST_PORT:-8000}`.
-The database still has no host port. For API source hot reload, add the
-development override:
+container and publishes the API only on `127.0.0.1:${API_HOST_PORT:-8001}`.
+Port 8001 is the repository default so CareerSignal does not take port 8000
+from another local project. Override `API_HOST_PORT` in the ignored root
+`.env` when another loopback port is required. The database still has no host
+port. For API source hot reload, add the development override:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build api
@@ -151,9 +153,9 @@ npm ci
 npm run dev
 ```
 
-The frontend defaults to `http://localhost:5173`. The API and OpenAPI UI use
-`http://127.0.0.1:${API_HOST_PORT:-8000}` and
-`http://127.0.0.1:${API_HOST_PORT:-8000}/docs` respectively. On Windows, read
+The frontend defaults to `http://localhost:5173`. With the committed example,
+the API and OpenAPI UI use `http://127.0.0.1:8001` and
+`http://127.0.0.1:8001/docs` respectively. On Windows, read
 the concrete port from `API_HOST_PORT` in `.env` rather than using the shell
 placeholder literally.
 

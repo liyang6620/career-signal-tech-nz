@@ -34,7 +34,7 @@ services:
       EMBEDDING_CACHE_PATH: /home/appuser/.cache/fastembed
       STARTUP_SUPERVISED: "true"
     ports:
-      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
+      - "127.0.0.1:${API_HOST_PORT:-8001}:8000"
     depends_on:
       database:
         condition: service_healthy
