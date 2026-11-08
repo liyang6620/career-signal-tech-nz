@@ -2422,7 +2422,7 @@ body { background: var(--canvas); color: var(--ink); }
 .signal-kicker { display: block; color: #d1a962; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
 .signal-overview h3 { margin: 8px 0 0; color: #f7f5ef; font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -.008em; }
 .signal-overview-heading p { max-width: 640px; margin: 8px 0 0; color: #bdcbc4; font-size: 12px; line-height: 1.55; }
-.signal-context { flex: none; padding-top: 3px; color: #bdcbc4; font-size: 11px; white-space: nowrap; }
+.signal-context { flex: none; padding-top: 3px; color: var(--ink-2); font-size: 11px; white-space: nowrap; }
 .signal-map-layout { display: grid; grid-template-columns: minmax(340px, 1.25fr) minmax(220px, .75fr); gap: 22px; align-items: center; margin-top: 14px; }
 .signal-map { display: block; width: 100%; max-width: 490px; height: 268px; overflow: visible; }
 .signal-orbit { fill: none; stroke: #41595a; stroke-width: 1; stroke-dasharray: 2 5; }

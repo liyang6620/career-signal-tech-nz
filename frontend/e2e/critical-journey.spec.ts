@@ -300,6 +300,7 @@ test("Signal tokens remain the computed application palette", async ({ page }) =
     const heading = getComputedStyle(document.querySelector("h1")!);
     const brandField = getComputedStyle(document.querySelector(".signal-report-side")!);
     const primary = getComputedStyle(document.querySelector(".primary-button")!);
+    const context = getComputedStyle(document.querySelector(".signal-pagehead .signal-context")!);
     return {
       brandToken: root.getPropertyValue("--brand").trim(),
       inkToken: root.getPropertyValue("--ink").trim(),
@@ -307,6 +308,7 @@ test("Signal tokens remain the computed application palette", async ({ page }) =
       primaryBackground: primary.backgroundColor,
       headingColour: heading.color,
       headingTracking: heading.letterSpacing,
+      contextColour: context.color,
     };
   });
   expect(palette).toEqual({
@@ -316,7 +318,13 @@ test("Signal tokens remain the computed application palette", async ({ page }) =
     primaryBackground: "rgb(14, 14, 14)",
     headingColour: "rgb(14, 14, 14)",
     headingTracking: expect.stringMatching(/^-/),
+    contextColour: "rgb(79, 77, 70)",
   });
+
+  for (const path of ["/app/record", "/app/profile"]) {
+    await page.goto(path);
+    await expect(page.locator(".signal-pagehead .signal-context")).toHaveCSS("color", "rgb(79, 77, 70)");
+  }
 });
 
 test("mobile evidence register is not clipped", async ({ page }) => {
